@@ -1,0 +1,15 @@
+@inherits LayoutComponentBase
+
+@* Layout da página pública de agendamento: sem menu, pensado para o celular do cliente. *@
+<MudThemeProvider Theme="@Tema.Padrao" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudMainContent Class="py-6 px-4">
+        <MudContainer MaxWidth="MaxWidth.Small" Class="pa-0">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>

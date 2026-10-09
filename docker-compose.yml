@@ -1,0 +1,22 @@
+# Banco de dados para desenvolvimento: docker compose up -d
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: secretaria
+      POSTGRES_USER: secretaria
+      POSTGRES_PASSWORD: secretaria
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  # Captura os e-mails enviados em desenvolvimento: veja em http://localhost:8025
+  mailpit:
+    image: axllent/mailpit:v1.27
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+volumes:
+  pgdata:

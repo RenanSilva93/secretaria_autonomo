@@ -1,0 +1,283 @@
+@page "/"
+@attribute [Authorize]
+@inject ApiClient Api
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogos
+
+<PageTitle>Agenda</PageTitle>
+
+<MudGrid>
+    <MudItem xs="12" md="7">
+        <MudPaper Class="pa-4">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap" Class="mb-3">
+                <MudText Typo="Typo.h5">Agenda</MudText>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" OnClick="@(() => IrParaDia(_dia.AddDays(-1)))" />
+                    <MudDatePicker Date="_dia" DateChanged="@(d => IrParaDia(d ?? DateTime.Today))" DateFormat="ddd, dd/MM" Style="max-width: 140px" />
+                    <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" OnClick="@(() => IrParaDia(_dia.AddDays(1)))" />
+                    <MudButton Variant="Variant.Text" OnClick="@(() => IrParaDia(DateTime.Today))">Hoje</MudButton>
+                    <MudButton Variant="Variant.Outlined" Size="Size.Small" Href="semana" StartIcon="@Icons.Material.Filled.ViewWeek">Semana</MudButton>
+                </MudStack>
+            </MudStack>
+
+            @foreach (var b in _bloqueiosDoDia)
+            {
+                <MudAlert Severity="Severity.Normal" Icon="@Icons.Material.Filled.EventBusy" Dense="true" Class="mb-2">
+                    Agenda bloqueada: <b>@Formatacao.Periodo(b.Inicio, b.Fim, TimeZoneInfo.Local)</b>@(b.Motivo is null ? "" : $" · {b.Motivo}")
+                </MudAlert>
+            }
+
+            @if (_carregando)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+            }
+            else if (_agendamentos.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Nenhum agendamento neste dia.</MudAlert>
+            }
+            else
+            {
+                <MudTable Items="_agendamentos" Dense="true" Hover="true" Elevation="0" Breakpoint="Breakpoint.Sm">
+                    <HeaderContent>
+                        <MudTh>Horário</MudTh>
+                        <MudTh>Cliente</MudTh>
+                        <MudTh>Serviço</MudTh>
+                        <MudTh>Status</MudTh>
+                        <MudTh></MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Horário"><b>@Formatacao.Hora(context.Inicio)</b>–@Formatacao.Hora(context.Fim)</MudTd>
+                        <MudTd DataLabel="Cliente">
+                            @context.Cliente
+                            <MudText Typo="Typo.caption" Class="d-block">@Formatacao.Telefone(context.TelefoneCliente)</MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Serviço">@context.Servico</MudTd>
+                        <MudTd DataLabel="Status">
+                            @{ var (texto, cor) = Formatacao.Status(context.Status); }
+                            <MudChip T="string" Size="Size.Small" Color="cor">@texto</MudChip>
+                        </MudTd>
+                        <MudTd>
+                            @if (context.Status == "Pendente")
+                            {
+                                <MudTooltip Text="Confirmar">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Check" Color="Color.Success" Size="Size.Small"
+                                                   OnClick="@(() => Executar(() => Api.ConfirmarAgendamentoAsync(context.Id), "Agendamento confirmado."))" />
+                                </MudTooltip>
+                            }
+                            @if (context.Status is "Pendente" or "Confirmado")
+                            {
+                                <MudTooltip Text="Remarcar">
+                                    <MudIconButton Icon="@Icons.Material.Filled.EditCalendar" Color="Color.Primary" Size="Size.Small"
+                                                   OnClick="@(() => AbrirAgendamento(context, remarcar: true))" />
+                                </MudTooltip>
+                                <MudTooltip Text="Cancelar">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Close" Color="Color.Error" Size="Size.Small"
+                                                   OnClick="@(() => Executar(() => Api.CancelarAgendamentoAsync(context.Id), "Agendamento cancelado."))" />
+                                </MudTooltip>
+                            }
+                            <MudTooltip Text="Abrir conversa no WhatsApp">
+                                <MudIconButton Icon="@Icons.Custom.Brands.WhatsApp" Size="Size.Small"
+                                               Href="@($"https://wa.me/{context.TelefoneCliente}")" Target="_blank" />
+                            </MudTooltip>
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="5">
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.h6" Class="mb-2">Novo agendamento</MudText>
+
+            <MudAutocomplete T="ClienteDto" Label="Cliente" @bind-Value="_cliente" SearchFunc="BuscarClientes"
+                             ToStringFunc="@(c => c is null ? null : $"{c.Nome} · {Formatacao.Telefone(c.Telefone)}")"
+                             ResetValueOnEmptyText="true" DebounceInterval="300" Class="mb-1" />
+            <MudLink Href="clientes" Typo="Typo.caption">Cadastrar cliente novo</MudLink>
+
+            <MudSelect T="Guid?" Label="Serviço" Value="_servicoId" ValueChanged="@(async (Guid? v) => { _servicoId = v; await CarregarHorarios(); })" Class="mt-3">
+                @foreach (var s in _servicos)
+                {
+                    <MudSelectItem T="Guid?" Value="s.Id">@s.Nome (@s.DuracaoMinutos min · @s.Preco.ToString("C"))</MudSelectItem>
+                }
+            </MudSelect>
+
+            @if (_profissionais.Count > 1)
+            {
+                <MudSelect T="Guid?" Label="Profissional" Value="_profissionalId" ValueChanged="@(async (Guid? v) => { _profissionalId = v; await CarregarHorarios(); })" Class="mt-3">
+                    @foreach (var p in _profissionais)
+                    {
+                        <MudSelectItem T="Guid?" Value="p.Id">@p.Nome</MudSelectItem>
+                    }
+                </MudSelect>
+            }
+
+            @if (_servicoId is not null && _profissionalId is not null)
+            {
+                <MudText Typo="Typo.subtitle2" Class="mt-4 mb-1">Horários livres em @_dia.ToString("dd/MM")</MudText>
+                @if (_horarios.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Nenhum horário livre neste dia.</MudText>
+                }
+                <div class="d-flex flex-wrap gap-2">
+                    @foreach (var h in _horarios)
+                    {
+                        <MudButton Size="Size.Small" Color="Color.Primary"
+                                   Variant="@(h.Inicio == _horarioEscolhido ? Variant.Filled : Variant.Outlined)"
+                                   OnClick="@(() => { _horarioEscolhido = h.Inicio; _encaixe = null; })">
+                            @Formatacao.Hora(h.Inicio)
+                        </MudButton>
+                    }
+                </div>
+
+                <MudTimePicker Label="Ou outro horário (encaixe)" Time="_encaixe" AmPm="false" Class="mt-3"
+                               TimeChanged="@(t => { _encaixe = t; _horarioEscolhido = null; })" />
+            }
+
+            <MudTextField @bind-Value="_observacao" Label="Observação" Lines="2" Class="mt-3" />
+
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Class="mt-4"
+                       Disabled="@(!PodeAgendar || _salvando)" OnClick="Agendar">
+                Agendar
+            </MudButton>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    /// <summary>Dia inicial (yyyy-MM-dd), usado ao clicar num dia na visão semanal.</summary>
+    [SupplyParameterFromQuery(Name = "dia")] public string? DiaInicial { get; set; }
+
+    private DateTime _dia = DateTime.Today;
+    private bool _carregando = true;
+    private bool _salvando;
+
+    private List<AgendamentoDto> _agendamentos = [];
+    private List<ServicoDto> _servicos = [];
+    private List<ProfissionalDto> _profissionais = [];
+    private List<HorarioDisponivelDto> _horarios = [];
+    private List<BloqueioDto> _bloqueiosDoDia = [];
+
+    private ClienteDto? _cliente;
+    private Guid? _servicoId;
+    private Guid? _profissionalId;
+    private DateTimeOffset? _horarioEscolhido;
+    private TimeSpan? _encaixe;
+    private string? _observacao;
+
+    private DateTimeOffset? InicioSelecionado =>
+        _horarioEscolhido ?? (_encaixe is { } t ? Formatacao.NoHorarioLocal(_dia, t) : null);
+
+    private bool PodeAgendar => _cliente is not null && _servicoId is not null && _profissionalId is not null && InicioSelecionado is not null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (DateTime.TryParseExact(DiaInicial, "yyyy-MM-dd", null, System.Globalization.DateTimeStyles.None, out var dia))
+            _dia = dia;
+
+        try
+        {
+            _servicos = await Api.ListarServicosAsync();
+            _profissionais = await Api.ListarProfissionaisAsync();
+            _profissionalId = _profissionais.FirstOrDefault()?.Id;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+
+        await CarregarDia();
+    }
+
+    private async Task IrParaDia(DateTime dia)
+    {
+        _dia = dia.Date;
+        await CarregarDia();
+    }
+
+    private async Task CarregarDia()
+    {
+        _carregando = true;
+        try
+        {
+            var inicio = Formatacao.InicioDoDiaLocal(_dia);
+            var fim = Formatacao.InicioDoDiaLocal(_dia.AddDays(1));
+            _agendamentos = await Api.ListarAgendamentosAsync(inicio, fim);
+            _bloqueiosDoDia = _profissionalId is { } profissional
+                ? await Api.ListarBloqueiosAsync(profissional, inicio, fim)
+                : [];
+            await CarregarHorarios();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _carregando = false;
+        }
+    }
+
+    private async Task CarregarHorarios()
+    {
+        _horarioEscolhido = null;
+        _horarios = _servicoId is { } servico && _profissionalId is { } profissional
+            ? await Api.ListarDisponibilidadeAsync(profissional, servico, DateOnly.FromDateTime(_dia))
+            : [];
+    }
+
+    private async Task<IEnumerable<ClienteDto>> BuscarClientes(string? texto, CancellationToken ct) =>
+        await Api.ListarClientesAsync(texto);
+
+    private async Task Agendar()
+    {
+        _salvando = true;
+        try
+        {
+            await Api.CriarAgendamentoAsync(new CriarAgendamentoRequest(
+                _profissionalId!.Value, _servicoId!.Value, _cliente!.Id, InicioSelecionado!.Value, _observacao));
+
+            Snackbar.Add("Agendamento criado!", Severity.Success);
+            _cliente = null;
+            _encaixe = null;
+            _observacao = null;
+            await CarregarDia();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _salvando = false;
+        }
+    }
+
+    private async Task AbrirAgendamento(AgendamentoDto agendamento, bool remarcar)
+    {
+        var parametros = new DialogParameters<AgendamentoDialog>
+        {
+            { x => x.Agendamento, agendamento },
+            { x => x.AbrirRemarcando, remarcar },
+        };
+        var dialogo = await Dialogos.ShowAsync<AgendamentoDialog>(null, parametros,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true });
+
+        if (await dialogo.Result is { Canceled: false })
+            await CarregarDia();
+    }
+
+    private async Task Executar(Func<Task> acao, string mensagemSucesso)
+    {
+        try
+        {
+            await acao();
+            Snackbar.Add(mensagemSucesso, Severity.Success);
+            await CarregarDia();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

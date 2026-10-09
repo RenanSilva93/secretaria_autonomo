@@ -1,0 +1,46 @@
+@inherits LayoutComponentBase
+@inject ProvedorAutenticacao Autenticacao
+@inject Sessao Sessao
+@inject NavigationManager Navigation
+
+<MudThemeProvider Theme="@Tema.Padrao" @bind-IsDarkMode="_modoEscuro" ObserveSystemDarkModeChange="true" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="1">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@(() => _menuAberto = !_menuAberto)" />
+        <MudText Typo="Typo.h6" Class="ml-2">@(Autenticacao.Conta?.NomeNegocio ?? "Secretária")</MudText>
+        <MudSpacer />
+        <MudIconButton Icon="@(_modoEscuro ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
+                       Color="Color.Inherit" OnClick="@(() => _modoEscuro = !_modoEscuro)" />
+        <AuthorizeView>
+            <MudMenu Icon="@Icons.Material.Filled.AccountCircle" Color="Color.Inherit" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                <MudMenuItem Disabled="true">@context.User.Identity?.Name</MudMenuItem>
+                <MudMenuItem Icon="@Icons.Material.Filled.Logout" OnClick="Sair">Sair</MudMenuItem>
+            </MudMenu>
+        </AuthorizeView>
+    </MudAppBar>
+
+    <MudDrawer @bind-Open="_menuAberto" ClipMode="DrawerClipMode.Always" Elevation="2" Variant="DrawerVariant.Responsive">
+        <NavMenu />
+    </MudDrawer>
+
+    <MudMainContent Class="pt-16 pa-4">
+        <MudContainer MaxWidth="MaxWidth.Large" Class="pa-0">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private bool _menuAberto = true;
+    private bool _modoEscuro;
+
+    private async Task Sair()
+    {
+        await Sessao.SairAsync();
+        Navigation.NavigateTo("entrar");
+    }
+}

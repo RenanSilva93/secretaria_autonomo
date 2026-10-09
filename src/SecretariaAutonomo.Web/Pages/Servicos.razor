@@ -1,0 +1,129 @@
+@page "/servicos"
+@attribute [Authorize]
+@inject ApiClient Api
+@inject ISnackbar Snackbar
+
+<PageTitle>Serviços</PageTitle>
+
+<MudGrid>
+    <MudItem xs="12" md="8">
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.h5" Class="mb-3">Serviços</MudText>
+            <MudTable Items="_servicos" Dense="true" Hover="true" Elevation="0" Breakpoint="Breakpoint.Sm" Loading="_carregando">
+                <HeaderContent>
+                    <MudTh>Serviço</MudTh>
+                    <MudTh>Duração</MudTh>
+                    <MudTh>Preço</MudTh>
+                    <MudTh></MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Serviço">@context.Nome</MudTd>
+                    <MudTd DataLabel="Duração">@context.DuracaoMinutos min</MudTd>
+                    <MudTd DataLabel="Preço">@context.Preco.ToString("C")</MudTd>
+                    <MudTd>
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => Editar(context))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => Desativar(context))" />
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="4">
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.h6" Class="mb-2">@(_editandoId is null ? "Novo serviço" : "Editar serviço")</MudText>
+            <MudTextField @bind-Value="_nome" Label="Nome" />
+            <MudNumericField @bind-Value="_duracao" Label="Duração (minutos)" Min="5" Max="600" Step="5" />
+            <MudNumericField @bind-Value="_preco" Label="Preço" Min="0" Format="N2" Adornment="Adornment.Start" AdornmentText="R$" />
+            <MudStack Row="true" Class="mt-4">
+                @if (_editandoId is not null)
+                {
+                    <MudButton Variant="Variant.Text" OnClick="Limpar">Cancelar</MudButton>
+                }
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" OnClick="Salvar"
+                           Disabled="@string.IsNullOrWhiteSpace(_nome)">
+                    Salvar
+                </MudButton>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private List<ServicoDto> _servicos = [];
+    private bool _carregando = true;
+
+    private Guid? _editandoId;
+    private string? _nome;
+    private int _duracao = 30;
+    private decimal _preco;
+
+    protected override Task OnInitializedAsync() => Carregar();
+
+    private async Task Carregar()
+    {
+        _carregando = true;
+        try
+        {
+            _servicos = await Api.ListarServicosAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _carregando = false;
+        }
+    }
+
+    private void Editar(ServicoDto servico)
+    {
+        _editandoId = servico.Id;
+        _nome = servico.Nome;
+        _duracao = servico.DuracaoMinutos;
+        _preco = servico.Preco;
+    }
+
+    private void Limpar()
+    {
+        _editandoId = null;
+        _nome = null;
+        _duracao = 30;
+        _preco = 0;
+    }
+
+    private async Task Salvar()
+    {
+        try
+        {
+            var req = new SalvarServicoRequest(_nome!, _duracao, _preco);
+            if (_editandoId is { } id)
+                await Api.AtualizarServicoAsync(id, req);
+            else
+                await Api.CriarServicoAsync(req);
+
+            Snackbar.Add("Serviço salvo!", Severity.Success);
+            Limpar();
+            await Carregar();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task Desativar(ServicoDto servico)
+    {
+        try
+        {
+            await Api.DesativarServicoAsync(servico.Id);
+            Snackbar.Add($"\"{servico.Nome}\" removido.", Severity.Info);
+            await Carregar();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

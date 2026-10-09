@@ -1,0 +1,108 @@
+@page "/cadastrar"
+@layout PublicoLayout
+@using System.Globalization
+@using System.Text
+@inject Sessao Sessao
+@inject NavigationManager Navigation
+
+<PageTitle>Cadastrar</PageTitle>
+
+<MudPaper Class="pa-6 mt-8">
+    <MudText Typo="Typo.h4" Align="Align.Center">Comece grátis</MudText>
+    <MudText Align="Align.Center" Color="Color.Secondary" Class="mb-6">Sua agenda online e página de agendamento em 1 minuto</MudText>
+
+    <EditForm Model="this" OnValidSubmit="CadastrarAsync">
+        <MudTextField T="string" Value="_nomeNegocio" ValueChanged="AoMudarNomeNegocio" Immediate="true"
+                      Label="Nome do negócio" Placeholder="Ex.: Studio Ana Nails" Variant="Variant.Outlined" Class="mb-3" />
+
+        <MudTextField T="string" Value="_slug" ValueChanged="@(v => { _slug = v; _slugEditado = true; })"
+                      Label="Endereço da sua página" Variant="Variant.Outlined" Class="mb-1"
+                      Adornment="Adornment.Start" AdornmentText="/agendar/" />
+        <MudText Typo="Typo.caption" Class="mb-3 d-block">
+            Seus clientes vão agendar em: <b>@Navigation.BaseUri@("agendar/")@(_slug)</b>
+        </MudText>
+
+        <MudTextField @bind-Value="_seuNome" Label="Seu nome" Variant="Variant.Outlined" Class="mb-3" />
+        <MudTextField @bind-Value="_email" Label="E-mail" InputType="InputType.Email" Variant="Variant.Outlined" Class="mb-3"
+                      autocomplete="username" />
+        <MudTextField @bind-Value="_senha" Label="Senha" InputType="InputType.Password" Variant="Variant.Outlined"
+                      HelperText="Mínimo 8 caracteres, com letras e números" autocomplete="new-password" />
+
+        @if (_erro is not null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-4" Dense="true">@_erro</MudAlert>
+        }
+
+        <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Size="Size.Large"
+                   Class="mt-6" Disabled="@(_enviando || !Preenchido)">
+            Criar conta
+        </MudButton>
+    </EditForm>
+
+    <MudText Align="Align.Center" Class="mt-6">
+        Já tem conta? <MudLink Href="entrar">Entrar</MudLink>
+    </MudText>
+</MudPaper>
+
+@code {
+    private string? _nomeNegocio;
+    private string? _slug;
+    private bool _slugEditado;
+    private string? _seuNome;
+    private string? _email;
+    private string? _senha;
+    private string? _erro;
+    private bool _enviando;
+
+    private bool Preenchido =>
+        !string.IsNullOrWhiteSpace(_nomeNegocio) && !string.IsNullOrWhiteSpace(_slug) && !string.IsNullOrWhiteSpace(_seuNome)
+        && !string.IsNullOrWhiteSpace(_email) && !string.IsNullOrEmpty(_senha);
+
+    private void AoMudarNomeNegocio(string? valor)
+    {
+        _nomeNegocio = valor;
+        if (!_slugEditado)
+            _slug = GerarSlug(valor ?? "");
+    }
+
+    private async Task CadastrarAsync()
+    {
+        _enviando = true;
+        _erro = null;
+        try
+        {
+            await Sessao.CadastrarAsync(new CadastroRequest(_nomeNegocio!, _slug!, _seuNome!, _email!, _senha!));
+            Navigation.NavigateTo("horarios?bemvindo=true");
+        }
+        catch (Exception ex)
+        {
+            _erro = ex.Message;
+        }
+        finally
+        {
+            _enviando = false;
+        }
+    }
+
+    /// <summary>"Studio Ána Nails!" → "studio-ana-nails"</summary>
+    private static string GerarSlug(string texto)
+    {
+        var semAcento = new StringBuilder();
+        foreach (var c in texto.Normalize(NormalizationForm.FormD))
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)
+                semAcento.Append(c);
+        }
+
+        var slug = new StringBuilder();
+        foreach (var c in semAcento.ToString().ToLowerInvariant())
+        {
+            if (c is >= 'a' and <= 'z' or >= '0' and <= '9')
+                slug.Append(c);
+            else if (slug.Length > 0 && slug[^1] != '-')
+                slug.Append('-');
+        }
+
+        return slug.ToString().Trim('-');
+    }
+}

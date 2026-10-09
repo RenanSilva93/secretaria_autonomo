@@ -1,0 +1,82 @@
+@page "/redefinir-senha"
+@layout PublicoLayout
+@inject Sessao Sessao
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>Criar nova senha</PageTitle>
+
+<MudPaper Class="pa-6 mt-8">
+    <MudText Typo="Typo.h5" Align="Align.Center">Criar nova senha</MudText>
+
+    @if (string.IsNullOrEmpty(Email) || string.IsNullOrEmpty(Codigo))
+    {
+        <MudAlert Severity="Severity.Warning" Class="mt-6">
+            Este link está incompleto. Abra o link exatamente como veio no e-mail, ou peça um novo.
+        </MudAlert>
+        <MudButton Href="esqueci-senha" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Class="mt-4">Pedir novo link</MudButton>
+    }
+    else
+    {
+        <MudText Align="Align.Center" Color="Color.Secondary" Class="mb-6 mt-2">Conta: <b>@Email</b></MudText>
+
+        <EditForm Model="this" OnValidSubmit="SalvarAsync">
+            @* Campo oculto com o e-mail ajuda o gerenciador de senhas do navegador a salvar a senha nova na conta certa. *@
+            <input type="email" value="@Email" autocomplete="username" hidden readonly />
+
+            <MudTextField @bind-Value="_senha" Label="Nova senha" InputType="InputType.Password" Variant="Variant.Outlined" Class="mb-3"
+                          HelperText="Mínimo 8 caracteres, com letras e números" autocomplete="new-password" />
+            <MudTextField @bind-Value="_confirmacao" Label="Repita a nova senha" InputType="InputType.Password" Variant="Variant.Outlined"
+                          autocomplete="new-password"
+                          Error="@(_confirmacao is { Length: > 0 } && _confirmacao != _senha)" ErrorText="As senhas não são iguais" />
+
+            @if (_erro is not null)
+            {
+                <MudAlert Severity="Severity.Error" Class="mt-4" Dense="true">
+                    @_erro
+                    @if (_linkExpirado)
+                    {
+                        <MudLink Href="esqueci-senha" Class="d-block mt-1">Pedir novo link</MudLink>
+                    }
+                </MudAlert>
+            }
+
+            <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Size="Size.Large"
+                       Class="mt-6" Disabled="@(_salvando || string.IsNullOrEmpty(_senha) || _senha != _confirmacao)">
+                Salvar e entrar
+            </MudButton>
+        </EditForm>
+    }
+</MudPaper>
+
+@code {
+    [SupplyParameterFromQuery(Name = "email")] public string? Email { get; set; }
+    [SupplyParameterFromQuery(Name = "codigo")] public string? Codigo { get; set; }
+
+    private string? _senha;
+    private string? _confirmacao;
+    private string? _erro;
+    private bool _linkExpirado;
+    private bool _salvando;
+
+    private async Task SalvarAsync()
+    {
+        _salvando = true;
+        _erro = null;
+        try
+        {
+            await Sessao.RedefinirSenhaAsync(new RedefinirSenhaRequest(Email!, Codigo!, _senha!));
+            Snackbar.Add("Senha alterada! Você já está conectado.", Severity.Success);
+            Navigation.NavigateTo("", replace: true);
+        }
+        catch (Exception ex)
+        {
+            _erro = ex.Message;
+            _linkExpirado = ex.Message.Contains("link", StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            _salvando = false;
+        }
+    }
+}

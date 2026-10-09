@@ -1,0 +1,201 @@
+@page "/horarios"
+@attribute [Authorize]
+@using System.Globalization
+@inject ApiClient Api
+@inject ProvedorAutenticacao Autenticacao
+@inject ISnackbar Snackbar
+
+<PageTitle>Horários de trabalho</PageTitle>
+
+@if (BemVindo)
+{
+    <MudAlert Severity="Severity.Success" Class="mb-4">
+        Conta criada! Defina seus horários de atendimento para liberar sua página de agendamento.
+        Depois, cadastre seus serviços em <MudLink Href="servicos">Serviços</MudLink>.
+    </MudAlert>
+}
+
+<MudPaper Class="pa-4">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Class="mb-2">
+        <div>
+            <MudText Typo="Typo.h5">Horários de trabalho</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Seus clientes só conseguem agendar dentro destes horários. Use duas faixas no mesmo dia para a pausa do almoço.
+            </MudText>
+        </div>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
+                   OnClick="Salvar" Disabled="@(_carregando || _salvando)">
+            Salvar
+        </MudButton>
+    </MudStack>
+
+    @if (_carregando)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else
+    {
+        @foreach (var dia in _dias)
+        {
+            <MudDivider Class="my-2" />
+            <MudGrid Spacing="1" Class="align-center">
+                <MudItem xs="12" sm="3">
+                    <MudSwitch T="bool" Value="dia.Atende" ValueChanged="@(v => AlternarDia(dia, v))" Color="Color.Primary">
+                        <b>@dia.Nome</b>
+                    </MudSwitch>
+                </MudItem>
+                <MudItem xs="12" sm="9">
+                    @if (!dia.Atende)
+                    {
+                        <MudText Color="Color.Secondary" Class="py-2">Fechado</MudText>
+                    }
+                    else
+                    {
+                        @foreach (var faixa in dia.Faixas)
+                        {
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+                                <MudTimePicker @bind-Time="faixa.Inicio" Label="Das" AmPm="false" Style="max-width: 110px" />
+                                <MudTimePicker @bind-Time="faixa.Fim" Label="Até" AmPm="false" Style="max-width: 110px" />
+                                <MudIconButton Icon="@Icons.Material.Filled.RemoveCircleOutline" Size="Size.Small"
+                                               aria-label="Remover faixa" OnClick="@(() => RemoverFaixa(dia, faixa))" />
+                            </MudStack>
+                        }
+                        <MudStack Row="true" Spacing="1">
+                            <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AdicionarFaixa(dia))">
+                                Faixa
+                            </MudButton>
+                            <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.ContentCopy" OnClick="@(() => CopiarParaTodos(dia))">
+                                Usar nos outros dias abertos
+                            </MudButton>
+                        </MudStack>
+                    }
+                </MudItem>
+            </MudGrid>
+        }
+    }
+</MudPaper>
+
+@code {
+    [SupplyParameterFromQuery(Name = "bemvindo")] public bool BemVindo { get; set; }
+
+    private static readonly DayOfWeek[] OrdemDias =
+    [
+        DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday,
+        DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday,
+    ];
+
+    private List<DiaEdicao> _dias = [];
+    private bool _carregando = true;
+    private bool _salvando;
+    private Guid _profissionalId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            if (Autenticacao.Conta?.ProfissionalId is not { } profissionalId)
+            {
+                Snackbar.Add("Sua conta não está ligada a um profissional.", Severity.Error);
+                return;
+            }
+
+            _profissionalId = profissionalId;
+            var faixas = await Api.ListarHorariosAsync(profissionalId);
+            var nomes = CultureInfo.GetCultureInfo("pt-BR").DateTimeFormat;
+
+            _dias = OrdemDias.Select(d =>
+            {
+                var doDia = faixas.Where(f => f.DiaSemana == d)
+                    .Select(f => new FaixaEdicao { Inicio = f.Inicio.ToTimeSpan(), Fim = f.Fim.ToTimeSpan() })
+                    .ToList();
+                return new DiaEdicao(d, nomes.GetDayName(d)) { Atende = doDia.Count > 0, Faixas = doDia };
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _carregando = false;
+        }
+    }
+
+    private static void AlternarDia(DiaEdicao dia, bool atende)
+    {
+        dia.Atende = atende;
+        if (atende && dia.Faixas.Count == 0)
+            dia.Faixas.Add(new FaixaEdicao { Inicio = new(9, 0, 0), Fim = new(18, 0, 0) });
+    }
+
+    private static void AdicionarFaixa(DiaEdicao dia)
+    {
+        // Sugere a próxima faixa começando 1h depois da última (ex.: volta do almoço).
+        var ultimoFim = dia.Faixas.LastOrDefault()?.Fim ?? new TimeSpan(8, 0, 0);
+        var inicio = ultimoFim + TimeSpan.FromHours(1);
+        var fim = inicio + TimeSpan.FromHours(4);
+        if (fim >= TimeSpan.FromHours(24))
+            fim = new TimeSpan(23, 59, 0);
+        dia.Faixas.Add(new FaixaEdicao { Inicio = inicio < fim ? inicio : null, Fim = fim });
+    }
+
+    private static void RemoverFaixa(DiaEdicao dia, FaixaEdicao faixa)
+    {
+        dia.Faixas.Remove(faixa);
+        if (dia.Faixas.Count == 0)
+            dia.Atende = false;
+    }
+
+    private void CopiarParaTodos(DiaEdicao origem)
+    {
+        foreach (var dia in _dias.Where(d => d != origem && d.Atende))
+            dia.Faixas = origem.Faixas.Select(f => new FaixaEdicao { Inicio = f.Inicio, Fim = f.Fim }).ToList();
+
+        Snackbar.Add($"Horários de {origem.Nome} copiados. Lembre de salvar.", Severity.Info);
+    }
+
+    private async Task Salvar()
+    {
+        var faixas = new List<HorarioTrabalhoDto>();
+        foreach (var dia in _dias.Where(d => d.Atende))
+        foreach (var faixa in dia.Faixas)
+        {
+            if (faixa.Inicio is not { } inicio || faixa.Fim is not { } fim)
+            {
+                Snackbar.Add($"Preencha todos os horários de {dia.Nome}.", Severity.Warning);
+                return;
+            }
+
+            faixas.Add(new HorarioTrabalhoDto(dia.Dia, TimeOnly.FromTimeSpan(inicio), TimeOnly.FromTimeSpan(fim)));
+        }
+
+        _salvando = true;
+        try
+        {
+            await Api.SalvarHorariosAsync(_profissionalId, faixas);
+            Snackbar.Add("Horários salvos!", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _salvando = false;
+        }
+    }
+
+    private class DiaEdicao(DayOfWeek dia, string nome)
+    {
+        public DayOfWeek Dia { get; } = dia;
+        public string Nome { get; } = nome;
+        public bool Atende { get; set; }
+        public List<FaixaEdicao> Faixas { get; set; } = [];
+    }
+
+    private class FaixaEdicao
+    {
+        public TimeSpan? Inicio { get; set; }
+        public TimeSpan? Fim { get; set; }
+    }
+}

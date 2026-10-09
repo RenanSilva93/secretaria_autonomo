@@ -1,0 +1,72 @@
+@page "/esqueci-senha"
+@layout PublicoLayout
+@inject Sessao Sessao
+
+<PageTitle>Esqueci minha senha</PageTitle>
+
+<MudPaper Class="pa-6 mt-8">
+    <MudText Typo="Typo.h5" Align="Align.Center">Esqueci minha senha</MudText>
+
+    @if (_enviado is not null)
+    {
+        <MudAlert Severity="Severity.Success" Class="mt-6">@_enviado</MudAlert>
+        <MudText Typo="Typo.body2" Class="mt-4" Color="Color.Secondary">
+            O link vale por 1 hora. Se não chegar em alguns minutos, você pode pedir de novo.
+        </MudText>
+        <MudButton Href="entrar" Variant="Variant.Text" Color="Color.Primary" FullWidth="true" Class="mt-4">Voltar para o login</MudButton>
+    }
+    else
+    {
+        <MudText Align="Align.Center" Color="Color.Secondary" Class="mb-6 mt-2">
+            Informe o e-mail da sua conta e enviaremos um link para você criar uma nova senha.
+        </MudText>
+
+        <EditForm Model="this" OnValidSubmit="EnviarAsync">
+            <MudTextField @bind-Value="_email" Label="E-mail" InputType="InputType.Email" Variant="Variant.Outlined"
+                          autocomplete="username" />
+
+            @if (_erro is not null)
+            {
+                <MudAlert Severity="Severity.Error" Class="mt-4" Dense="true">@_erro</MudAlert>
+            }
+
+            <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Size="Size.Large"
+                       Class="mt-6" Disabled="@(_enviando || string.IsNullOrWhiteSpace(_email))">
+                Enviar link
+            </MudButton>
+        </EditForm>
+
+        <MudText Align="Align.Center" Class="mt-6">
+            <MudLink Href="entrar">Voltar para o login</MudLink>
+        </MudText>
+    }
+</MudPaper>
+
+@code {
+    [SupplyParameterFromQuery(Name = "email")] public string? EmailInicial { get; set; }
+
+    private string? _email;
+    private string? _erro;
+    private string? _enviado;
+    private bool _enviando;
+
+    protected override void OnInitialized() => _email = EmailInicial;
+
+    private async Task EnviarAsync()
+    {
+        _enviando = true;
+        _erro = null;
+        try
+        {
+            _enviado = await Sessao.PedirNovaSenhaAsync(_email!.Trim());
+        }
+        catch (Exception ex)
+        {
+            _erro = ex.Message;
+        }
+        finally
+        {
+            _enviando = false;
+        }
+    }
+}

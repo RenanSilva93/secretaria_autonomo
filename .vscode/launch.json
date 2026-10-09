@@ -1,0 +1,40 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            // API em http://localhost:5286 (não abre navegador)
+            "name": "API",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/src/SecretariaAutonomo.Api/bin/Debug/net10.0/SecretariaAutonomo.Api.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/src/SecretariaAutonomo.Api",
+            "stopAtEntry": false,
+            "env": {
+                "ASPNETCORE_ENVIRONMENT": "Development",
+                "ASPNETCORE_URLS": "http://localhost:5286"
+            }
+        },
+        {
+            // Front (Blazor WebAssembly) em http://localhost:5010; abre o navegador sozinho
+            "name": "Front",
+            "type": "blazorwasm",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/src/SecretariaAutonomo.Web",
+            "url": "http://localhost:5010"
+        },
+        {
+            "name": ".NET Core Attach",
+            "type": "coreclr",
+            "request": "attach"
+        }
+    ],
+    "compounds": [
+        {
+            "name": "API + Front",
+            "configurations": ["API", "Front"],
+            "stopAll": true
+        }
+    ]
+}

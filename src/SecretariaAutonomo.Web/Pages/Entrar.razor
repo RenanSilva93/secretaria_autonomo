@@ -1,0 +1,75 @@
+@page "/entrar"
+@layout PublicoLayout
+@inject Sessao Sessao
+@inject NavigationManager Navigation
+
+<PageTitle>Entrar</PageTitle>
+
+<MudPaper Class="pa-6 mt-8">
+    <MudText Typo="Typo.h4" Align="Align.Center">Secretária</MudText>
+    <MudText Align="Align.Center" Color="Color.Secondary" Class="mb-6">Entre para ver sua agenda</MudText>
+
+    <EditForm Model="this" OnValidSubmit="EntrarAsync">
+        <MudTextField @bind-Value="_email" Label="E-mail" InputType="InputType.Email" Variant="Variant.Outlined" Class="mb-3"
+                      autocomplete="username" />
+        <MudTextField @bind-Value="_senha" Label="Senha" InputType="InputType.Password" Variant="Variant.Outlined"
+                      autocomplete="current-password" />
+        <div class="d-flex justify-end mt-1">
+            <MudLink Href="@($"esqueci-senha{(string.IsNullOrWhiteSpace(_email) ? "" : $"?email={Uri.EscapeDataString(_email)}")}")" Typo="Typo.body2">
+                Esqueci minha senha
+            </MudLink>
+        </div>
+
+        @if (_erro is not null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-4" Dense="true">@_erro</MudAlert>
+        }
+
+        <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Size="Size.Large"
+                   Class="mt-6" Disabled="@(_enviando || string.IsNullOrWhiteSpace(_email) || string.IsNullOrEmpty(_senha))">
+            Entrar
+        </MudButton>
+    </EditForm>
+
+    <MudText Align="Align.Center" Class="mt-6">
+        Ainda não tem conta? <MudLink Href="cadastrar">Cadastre seu negócio</MudLink>
+    </MudText>
+</MudPaper>
+
+@code {
+    [SupplyParameterFromQuery] public string? Voltar { get; set; }
+
+    private string? _email;
+    private string? _senha;
+    private string? _erro;
+    private bool _enviando;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (await Sessao.EstaLogadoAsync())
+            IrParaDestino();
+    }
+
+    private async Task EntrarAsync()
+    {
+        _enviando = true;
+        _erro = null;
+        try
+        {
+            await Sessao.EntrarAsync(_email!, _senha!);
+            IrParaDestino();
+        }
+        catch (Exception ex)
+        {
+            _erro = ex.Message;
+        }
+        finally
+        {
+            _enviando = false;
+        }
+    }
+
+    // Só aceita caminhos relativos, para o parâmetro "voltar" não virar um redirecionamento para outro site.
+    private void IrParaDestino() =>
+        Navigation.NavigateTo(Voltar is { Length: > 0 } v && !v.Contains("//") && !v.Contains(':') ? v : "");
+}

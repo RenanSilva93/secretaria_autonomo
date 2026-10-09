@@ -1,0 +1,155 @@
+/* Grade semanal: 1px = 1 minuto, 60px por hora. */
+
+.semana-scroll {
+    overflow-x: auto;
+}
+
+.semana-grade {
+    display: grid;
+    grid-template-columns: 52px repeat(7, minmax(110px, 1fr));
+    min-width: 820px;
+}
+
+.cabecalho {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 4px 0 8px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+}
+
+.cabecalho:hover {
+    background: var(--mud-palette-action-default-hover);
+}
+
+.dia-semana {
+    font-size: .75rem;
+    text-transform: uppercase;
+    color: var(--mud-palette-text-secondary);
+}
+
+.dia-numero {
+    font-size: 1.25rem;
+}
+
+.cabecalho.hoje .dia-numero {
+    color: var(--mud-palette-primary-text);
+    background: var(--mud-palette-primary);
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.coluna-horas {
+    position: relative;
+}
+
+.rotulo-hora {
+    position: absolute;
+    right: 6px;
+    transform: translateY(-50%);
+    font-size: .7rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+.rotulo-hora:first-child {
+    transform: none;
+}
+
+.coluna-dia {
+    position: relative;
+    border-left: 1px solid var(--mud-palette-lines-default);
+    /* Linha a cada hora */
+    background-image: repeating-linear-gradient(
+        to bottom,
+        var(--mud-palette-lines-default) 0,
+        var(--mud-palette-lines-default) 1px,
+        transparent 1px,
+        transparent 60px);
+}
+
+.coluna-dia.hoje {
+    background-color: var(--mud-palette-action-default-hover);
+}
+
+.fechado {
+    position: absolute;
+    left: 0;
+    right: 0;
+    background: var(--mud-palette-background-gray);
+    opacity: .7;
+    pointer-events: none;
+}
+
+.alvo {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 15px;
+}
+
+.arrastando .alvo:hover {
+    background: var(--mud-palette-primary-hover);
+}
+
+/* Enquanto arrasta, os blocos deixam o "soltar" chegar aos alvos que estão por baixo. */
+.arrastando .agendamento,
+.arrastando .bloqueio {
+    pointer-events: none;
+}
+
+.bloqueio {
+    position: absolute;
+    left: 0;
+    right: 0;
+    padding: 2px 4px;
+    font-size: .7rem;
+    overflow: hidden;
+    color: var(--mud-palette-text-secondary);
+    background: repeating-linear-gradient(
+        45deg,
+        var(--mud-palette-background-gray),
+        var(--mud-palette-background-gray) 6px,
+        var(--mud-palette-lines-default) 6px,
+        var(--mud-palette-lines-default) 12px);
+}
+
+.agendamento {
+    position: absolute;
+    left: 3px;
+    right: 3px;
+    padding: 2px 6px;
+    border-radius: 6px;
+    font-size: .75rem;
+    line-height: 1.2;
+    overflow: hidden;
+    cursor: pointer;
+    background: var(--mud-palette-primary);
+    color: var(--mud-palette-primary-text);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .2);
+}
+
+.agendamento[draggable="true"] {
+    cursor: grab;
+}
+
+.agendamento.pendente {
+    background: var(--mud-palette-warning);
+    color: var(--mud-palette-warning-text);
+}
+
+.agendamento.concluido,
+.agendamento.naocompareceu {
+    opacity: .55;
+}
+
+.agendamento .servico {
+    opacity: .85;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+}

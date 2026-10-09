@@ -1,0 +1,257 @@
+@page "/semana"
+@attribute [Authorize]
+@inject ApiClient Api
+@inject ProvedorAutenticacao Autenticacao
+@inject IDialogService Dialogos
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<PageTitle>Agenda da semana</PageTitle>
+
+<MudPaper Class="pa-4">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap" Class="mb-3">
+        <MudText Typo="Typo.h5">Semana</MudText>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+            <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" aria-label="Semana anterior" OnClick="@(() => IrPara(_segunda.AddDays(-7)))" />
+            <MudText Style="min-width: 150px" Align="Align.Center">@_segunda.ToString("dd/MM") – @_segunda.AddDays(6).ToString("dd/MM/yyyy")</MudText>
+            <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" aria-label="Próxima semana" OnClick="@(() => IrPara(_segunda.AddDays(7)))" />
+            <MudButton Variant="Variant.Text" OnClick="@(() => IrPara(DateTime.Today))">Hoje</MudButton>
+        </MudStack>
+    </MudStack>
+
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-2">
+        Toque num horário para ver detalhes ou remarcar. No computador, arraste para outro horário.
+    </MudText>
+
+    @if (_carregando)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+
+    <div class="semana-scroll">
+        <div class="semana-grade @(_arrastando is null ? "" : "arrastando")">
+            @* Cabeçalho *@
+            <div></div>
+            @for (var d = 0; d < 7; d++)
+            {
+                var dia = _segunda.AddDays(d);
+                <div class="cabecalho @(dia == DateTime.Today ? "hoje" : "")" @onclick="@(() => AbrirDia(dia))" title="Ver o dia">
+                    <span class="dia-semana">@dia.ToString("ddd")</span>
+                    <span class="dia-numero">@dia.Day</span>
+                </div>
+            }
+
+            @* Coluna de horas *@
+            <div class="coluna-horas" style="height: @(TotalMinutos)px">
+                @for (var h = _horaInicio; h < _horaFim; h++)
+                {
+                    <div class="rotulo-hora" style="top: @((h - _horaInicio) * 60)px">@($"{h:00}:00")</div>
+                }
+            </div>
+
+            @for (var d = 0; d < 7; d++)
+            {
+                var dia = _segunda.AddDays(d);
+                <div class="coluna-dia @(dia == DateTime.Today ? "hoje" : "")" style="height: @(TotalMinutos)px">
+                    @* Fora do horário de trabalho *@
+                    @foreach (var (topo, altura) in FaixasFechadas(dia))
+                    {
+                        <div class="fechado" style="top: @(topo)px; height: @(altura)px"></div>
+                    }
+
+                    @* Alvos para soltar ao arrastar (a cada 15 min) *@
+                    @for (var m = 0; m < TotalMinutos; m += 15)
+                    {
+                        var minuto = m;
+                        <div class="alvo" style="top: @(minuto)px"
+                             @ondragover:preventDefault="true"
+                             @ondrop="@(() => Soltar(dia, minuto))"></div>
+                    }
+
+                    @foreach (var b in _bloqueios)
+                    {
+                        if (Posicao(dia, b.Inicio, b.Fim) is { } pos)
+                        {
+                            <div class="bloqueio" style="top: @(pos.Topo)px; height: @(pos.Altura)px" title="@(b.Motivo ?? "Bloqueado")">
+                                @(b.Motivo ?? "Bloqueado")
+                            </div>
+                        }
+                    }
+
+                    @foreach (var a in _agendamentos)
+                    {
+                        if (Posicao(dia, a.Inicio, a.Fim) is { } pos)
+                        {
+                            <div class="agendamento @a.Status.ToLowerInvariant()" style="top: @(pos.Topo)px; height: @(pos.Altura)px"
+                                 draggable="@(PodeArrastar(a) ? "true" : "false")"
+                                 @ondragstart="@(() => _arrastando = a)"
+                                 @ondragend="@(() => _arrastando = null)"
+                                 @onclick="@(() => AbrirAgendamento(a))"
+                                 title="@($"{Formatacao.Hora(a.Inicio)} {a.Cliente} · {a.Servico}")">
+                                <b>@Formatacao.Hora(a.Inicio)</b> @a.Cliente
+                                <div class="servico">@a.Servico</div>
+                            </div>
+                        }
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</MudPaper>
+
+@code {
+    private const int HoraInicioPadrao = 8;
+    private const int HoraFimPadrao = 20;
+
+    private DateTime _segunda = SegundaDaSemana(DateTime.Today);
+    private int _horaInicio = HoraInicioPadrao;
+    private int _horaFim = HoraFimPadrao;
+    private bool _carregando = true;
+
+    private List<AgendamentoDto> _agendamentos = [];
+    private List<BloqueioDto> _bloqueios = [];
+    private List<HorarioTrabalhoDto> _horarios = [];
+    private AgendamentoDto? _arrastando;
+
+    private int TotalMinutos => (_horaFim - _horaInicio) * 60;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            if (Autenticacao.Conta?.ProfissionalId is { } profissionalId)
+                _horarios = await Api.ListarHorariosAsync(profissionalId);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+
+        await Carregar();
+    }
+
+    private async Task IrPara(DateTime dia)
+    {
+        _segunda = SegundaDaSemana(dia);
+        await Carregar();
+    }
+
+    private async Task Carregar()
+    {
+        _carregando = true;
+        try
+        {
+            var inicio = Formatacao.InicioDoDiaLocal(_segunda);
+            var fim = Formatacao.InicioDoDiaLocal(_segunda.AddDays(7));
+
+            _agendamentos = (await Api.ListarAgendamentosAsync(inicio, fim)).Where(a => a.Status != "Cancelado").ToList();
+            _bloqueios = Autenticacao.Conta?.ProfissionalId is { } profissionalId
+                ? await Api.ListarBloqueiosAsync(profissionalId, inicio, fim)
+                : [];
+
+            AjustarFaixaDeHoras();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _carregando = false;
+        }
+    }
+
+    /// <summary>Mostra do início do expediente mais cedo ao fim mais tarde, ampliando se houver encaixe fora dele.</summary>
+    private void AjustarFaixaDeHoras()
+    {
+        var inicios = _horarios.Select(h => h.Inicio.Hour)
+            .Concat(_agendamentos.Select(a => a.Inicio.ToLocalTime().Hour))
+            .ToList();
+        var fins = _horarios.Select(h => h.Fim.Minute > 0 ? h.Fim.Hour + 1 : h.Fim.Hour)
+            .Concat(_agendamentos.Select(a => a.Fim.ToLocalTime() is var f && f.Date > a.Inicio.ToLocalTime().Date ? 24 : f.Minute > 0 ? f.Hour + 1 : f.Hour))
+            .ToList();
+
+        _horaInicio = inicios.Count > 0 ? Math.Min(inicios.Min(), HoraInicioPadrao) : HoraInicioPadrao;
+        _horaFim = fins.Count > 0 ? Math.Max(fins.Max(), HoraFimPadrao) : HoraFimPadrao;
+        _horaFim = Math.Clamp(_horaFim, _horaInicio + 1, 24);
+    }
+
+    /// <summary>Posição (em px, 1px = 1min) de um intervalo dentro da coluna do dia, ou null se não aparece nele.</summary>
+    private (int Topo, int Altura)? Posicao(DateTime dia, DateTimeOffset inicio, DateTimeOffset fim)
+    {
+        var inicioGrade = Formatacao.NoHorarioLocal(dia, TimeSpan.FromHours(_horaInicio));
+        var topo = Math.Max(0, (int)(inicio - inicioGrade).TotalMinutes);
+        var base_ = Math.Min(TotalMinutos, (int)(fim - inicioGrade).TotalMinutes);
+        return base_ > topo ? (topo, base_ - topo) : null;
+    }
+
+    private IEnumerable<(int Topo, int Altura)> FaixasFechadas(DateTime dia)
+    {
+        var abertas = _horarios.Where(h => h.DiaSemana == dia.DayOfWeek)
+            .OrderBy(h => h.Inicio)
+            .Select(h => ((int)(h.Inicio.ToTimeSpan().TotalMinutes - _horaInicio * 60), (int)(h.Fim.ToTimeSpan().TotalMinutes - _horaInicio * 60)));
+
+        var cursor = 0;
+        foreach (var (inicio, fim) in abertas)
+        {
+            if (inicio > cursor && cursor < TotalMinutos)
+                yield return (cursor, Math.Min(inicio, TotalMinutos) - cursor);
+            cursor = Math.Max(cursor, fim);
+        }
+
+        if (cursor < TotalMinutos)
+            yield return (cursor, TotalMinutos - cursor);
+    }
+
+    private static bool PodeArrastar(AgendamentoDto a) => a.Status is "Pendente" or "Confirmado" && a.Inicio > DateTimeOffset.Now;
+
+    private async Task Soltar(DateTime dia, int minuto)
+    {
+        var agendamento = _arrastando;
+        _arrastando = null;
+        if (agendamento is null)
+            return;
+
+        var novoInicio = Formatacao.NoHorarioLocal(dia, TimeSpan.FromMinutes(_horaInicio * 60 + minuto));
+        if (novoInicio == agendamento.Inicio)
+            return;
+
+        var resposta = await Dialogos.ShowMessageBoxAsync(new MessageBoxOptions
+        {
+            Title = "Remarcar?",
+            Message = $"Mover {agendamento.Cliente} ({agendamento.Servico}) para {novoInicio:dddd, dd/MM 'às' HH:mm}?",
+            YesText = "Remarcar e avisar",
+            NoText = "Remarcar sem avisar",
+            CancelText = "Cancelar",
+        });
+
+        if (resposta is null)
+            return;
+
+        try
+        {
+            await Api.RemarcarAgendamentoAsync(agendamento.Id, new RemarcarAgendamentoRequest(novoInicio, AvisarCliente: resposta.Value));
+            Snackbar.Add($"{agendamento.Cliente} remarcado para {novoInicio:ddd, dd/MM HH:mm}.", Severity.Success);
+            await Carregar();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task AbrirAgendamento(AgendamentoDto agendamento)
+    {
+        var parametros = new DialogParameters<AgendamentoDialog> { { x => x.Agendamento, agendamento } };
+        var dialogo = await Dialogos.ShowAsync<AgendamentoDialog>(null, parametros,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true });
+
+        if (await dialogo.Result is { Canceled: false })
+            await Carregar();
+    }
+
+    private void AbrirDia(DateTime dia) => Navigation.NavigateTo($"?dia={dia:yyyy-MM-dd}");
+
+    private static DateTime SegundaDaSemana(DateTime dia) =>
+        dia.Date.AddDays(-(((int)dia.DayOfWeek + 6) % 7));
+}

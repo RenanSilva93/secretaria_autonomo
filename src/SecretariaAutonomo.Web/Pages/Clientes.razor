@@ -1,0 +1,128 @@
+@page "/clientes"
+@attribute [Authorize]
+@inject ApiClient Api
+@inject ISnackbar Snackbar
+
+<PageTitle>Clientes</PageTitle>
+
+<MudGrid>
+    <MudItem xs="12" md="8">
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.h5" Class="mb-3">Clientes</MudText>
+            <MudTextField T="string" Value="_busca" ValueChanged="Buscar" Immediate="true" DebounceInterval="300"
+                          Placeholder="Buscar por nome ou telefone" Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search" Class="mb-3" />
+
+            <MudTable Items="_clientes" Dense="true" Hover="true" Elevation="0" Breakpoint="Breakpoint.Sm" Loading="_carregando">
+                <HeaderContent>
+                    <MudTh>Nome</MudTh>
+                    <MudTh>Telefone</MudTh>
+                    <MudTh>Observações</MudTh>
+                    <MudTh></MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Nome">@context.Nome</MudTd>
+                    <MudTd DataLabel="Telefone">
+                        <MudLink Href="@($"https://wa.me/{context.Telefone}")" Target="_blank">@Formatacao.Telefone(context.Telefone)</MudLink>
+                    </MudTd>
+                    <MudTd DataLabel="Observações">@context.Observacoes</MudTd>
+                    <MudTd>
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => Editar(context))" />
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText>Nenhum cliente encontrado.</MudText>
+                </NoRecordsContent>
+            </MudTable>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="4">
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.h6" Class="mb-2">@(_editandoId is null ? "Novo cliente" : "Editar cliente")</MudText>
+            <MudTextField @bind-Value="_nome" Label="Nome" />
+            <MudTextField @bind-Value="_telefone" Label="WhatsApp (com DDD)" InputType="InputType.Telephone" Placeholder="(11) 99999-8888" />
+            <MudTextField @bind-Value="_observacoes" Label="Observações" Lines="2" />
+            <MudStack Row="true" Class="mt-4">
+                @if (_editandoId is not null)
+                {
+                    <MudButton Variant="Variant.Text" OnClick="Limpar">Cancelar</MudButton>
+                }
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" OnClick="Salvar"
+                           Disabled="@(string.IsNullOrWhiteSpace(_nome) || string.IsNullOrWhiteSpace(_telefone))">
+                    Salvar
+                </MudButton>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private List<ClienteDto> _clientes = [];
+    private string? _busca;
+    private bool _carregando = true;
+
+    private Guid? _editandoId;
+    private string? _nome;
+    private string? _telefone;
+    private string? _observacoes;
+
+    protected override Task OnInitializedAsync() => Buscar(null);
+
+    private async Task Buscar(string? busca)
+    {
+        _busca = busca;
+        _carregando = true;
+        try
+        {
+            _clientes = await Api.ListarClientesAsync(busca);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _carregando = false;
+        }
+    }
+
+    private void Editar(ClienteDto cliente)
+    {
+        _editandoId = cliente.Id;
+        _nome = cliente.Nome;
+        _telefone = Formatacao.Telefone(cliente.Telefone);
+        _observacoes = cliente.Observacoes;
+    }
+
+    private void Limpar()
+    {
+        _editandoId = null;
+        _nome = _telefone = _observacoes = null;
+    }
+
+    private async Task Salvar()
+    {
+        try
+        {
+            var req = new SalvarClienteRequest(_nome!, _telefone!, _observacoes);
+            if (_editandoId is { } id)
+            {
+                await Api.AtualizarClienteAsync(id, req);
+                Snackbar.Add("Cliente atualizado!", Severity.Success);
+            }
+            else
+            {
+                await Api.CriarClienteAsync(req);
+                Snackbar.Add("Cliente cadastrado!", Severity.Success);
+            }
+
+            Limpar();
+            await Buscar(_busca);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

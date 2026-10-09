@@ -1,0 +1,17 @@
+@inject ProvedorAutenticacao Autenticacao
+
+<MudNavMenu>
+    <MudNavLink Href="" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.CalendarToday">Agenda do dia</MudNavLink>
+    <MudNavLink Href="semana" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.ViewWeek">Semana</MudNavLink>
+    <MudNavLink Href="clientes" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.People">Clientes</MudNavLink>
+    <MudNavLink Href="servicos" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.ContentCut">Serviços</MudNavLink>
+    <MudNavLink Href="horarios" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Schedule">Horários de trabalho</MudNavLink>
+    <MudNavLink Href="folgas" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.BeachAccess">Folgas e férias</MudNavLink>
+    @if (Autenticacao.Conta is { } conta)
+    {
+        <MudDivider Class="my-2" />
+        <MudNavLink Href="@($"agendar/{conta.Slug}")" Target="_blank" Icon="@Icons.Material.Filled.Public">
+            Minha página de agendamento
+        </MudNavLink>
+    }
+</MudNavMenu>

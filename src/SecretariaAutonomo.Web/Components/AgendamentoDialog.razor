@@ -1,0 +1,186 @@
+@inject ApiClient Api
+@inject ISnackbar Snackbar
+
+@* Detalhes de um agendamento, com confirmar / cancelar / remarcar. Fecha com Ok(true) se algo mudou. *@
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@Agendamento.Cliente</MudText>
+    </TitleContent>
+    <DialogContent>
+        @{ var (textoStatus, corStatus) = Formatacao.Status(Agendamento.Status); }
+        <MudStack Spacing="1">
+            <MudText><b>@Agendamento.Servico</b> com @Agendamento.Profissional</MudText>
+            <MudText>@Formatacao.Periodo(Agendamento.Inicio, Agendamento.Fim, TimeZoneInfo.Local)</MudText>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <MudChip T="string" Size="Size.Small" Color="corStatus">@textoStatus</MudChip>
+                <MudLink Href="@($"https://wa.me/{Agendamento.TelefoneCliente}")" Target="_blank" Typo="Typo.body2">
+                    <MudIcon Icon="@Icons.Custom.Brands.WhatsApp" Size="Size.Small" Style="vertical-align: middle" />
+                    @Formatacao.Telefone(Agendamento.TelefoneCliente)
+                </MudLink>
+            </MudStack>
+            @if (Agendamento.Observacao is not null)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary">@Agendamento.Observacao</MudText>
+            }
+        </MudStack>
+
+        @if (_remarcando)
+        {
+            <MudDivider Class="my-4" />
+            <MudText Typo="Typo.subtitle1" Class="mb-2">Novo horário</MudText>
+            <MudDatePicker Date="_novoDia" DateChanged="EscolherDia" Label="Dia" MinDate="DateTime.Today" DateFormat="ddd, dd/MM/yyyy" />
+
+            @if (_carregandoHorarios)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="my-2" />
+            }
+            else
+            {
+                <MudText Typo="Typo.caption" Class="d-block mt-2 mb-1">Horários livres</MudText>
+                @if (_horarios.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Nenhum horário livre nesse dia.</MudText>
+                }
+                <div class="d-flex flex-wrap gap-2" style="max-height: 160px; overflow-y: auto">
+                    @foreach (var h in _horarios)
+                    {
+                        <MudButton Size="Size.Small" Color="Color.Primary"
+                                   Variant="@(h.Inicio == _escolhido ? Variant.Filled : Variant.Outlined)"
+                                   OnClick="@(() => { _escolhido = h.Inicio; _encaixe = null; })">
+                            @Formatacao.Hora(h.Inicio)
+                        </MudButton>
+                    }
+                </div>
+            }
+
+            <MudTimePicker Label="Ou outro horário (encaixe)" Time="_encaixe" AmPm="false" Class="mt-3"
+                           TimeChanged="@(t => { _encaixe = t; _escolhido = null; })" />
+            <MudCheckBox T="bool" @bind-Value="_avisarCliente" Color="Color.Primary" Class="mt-2">
+                Avisar o cliente pelo WhatsApp
+            </MudCheckBox>
+        }
+    </DialogContent>
+    <DialogActions>
+        @if (_remarcando)
+        {
+            <MudButton OnClick="@(() => _remarcando = false)">Voltar</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Remarcar" Disabled="@(_salvando || NovoInicio is null)">
+                Remarcar
+            </MudButton>
+        }
+        else
+        {
+            @if (PodeAlterar)
+            {
+                <MudButton Color="Color.Error" OnClick="Cancelar" Disabled="_salvando">Cancelar horário</MudButton>
+                <MudSpacer />
+                @if (Agendamento.Status == "Pendente")
+                {
+                    <MudButton Color="Color.Success" OnClick="Confirmar" Disabled="_salvando">Confirmar</MudButton>
+                }
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.EditCalendar"
+                           OnClick="AbrirRemarcacao" Disabled="_salvando">
+                    Remarcar
+                </MudButton>
+            }
+            else
+            {
+                <MudButton OnClick="@(() => MudDialog.Cancel())">Fechar</MudButton>
+            }
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] public required IMudDialogInstance MudDialog { get; set; }
+    [Parameter] public required AgendamentoDto Agendamento { get; set; }
+
+    /// <summary>Abre direto na remarcação (ex.: ao arrastar não é possível escolher um horário exato no celular).</summary>
+    [Parameter] public bool AbrirRemarcando { get; set; }
+
+    private bool _remarcando;
+    private bool _salvando;
+    private bool _carregandoHorarios;
+    private bool _avisarCliente = true;
+    private DateTime? _novoDia;
+    private List<HorarioDisponivelDto> _horarios = [];
+    private DateTimeOffset? _escolhido;
+    private TimeSpan? _encaixe;
+
+    private bool PodeAlterar => Agendamento.Status is "Pendente" or "Confirmado";
+
+    private DateTimeOffset? NovoInicio =>
+        _escolhido ?? (_encaixe is { } t && _novoDia is { } dia ? Formatacao.NoHorarioLocal(dia, t) : null);
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AbrirRemarcando && PodeAlterar)
+            await AbrirRemarcacao();
+    }
+
+    private async Task AbrirRemarcacao()
+    {
+        _remarcando = true;
+        var diaAtual = Agendamento.Inicio.ToLocalTime().Date;
+        await EscolherDia(diaAtual < DateTime.Today ? DateTime.Today : diaAtual);
+    }
+
+    private async Task EscolherDia(DateTime? dia)
+    {
+        _novoDia = dia;
+        _escolhido = null;
+        _horarios = [];
+        if (dia is null)
+            return;
+
+        _carregandoHorarios = true;
+        try
+        {
+            _horarios = await Api.ListarDisponibilidadeAsync(Agendamento.ProfissionalId, Agendamento.ServicoId, DateOnly.FromDateTime(dia.Value));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _carregandoHorarios = false;
+        }
+    }
+
+    private Task Remarcar() => Executar(async () =>
+    {
+        var remarcado = await Api.RemarcarAgendamentoAsync(Agendamento.Id, new RemarcarAgendamentoRequest(NovoInicio!.Value, _avisarCliente));
+        Snackbar.Add($"Remarcado para {Formatacao.Periodo(remarcado.Inicio, remarcado.Fim, TimeZoneInfo.Local)}.", Severity.Success);
+    });
+
+    private Task Confirmar() => Executar(async () =>
+    {
+        await Api.ConfirmarAgendamentoAsync(Agendamento.Id);
+        Snackbar.Add("Agendamento confirmado.", Severity.Success);
+    });
+
+    private Task Cancelar() => Executar(async () =>
+    {
+        await Api.CancelarAgendamentoAsync(Agendamento.Id);
+        Snackbar.Add("Agendamento cancelado.", Severity.Info);
+    });
+
+    private async Task Executar(Func<Task> acao)
+    {
+        _salvando = true;
+        try
+        {
+            await acao();
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _salvando = false;
+        }
+    }
+}

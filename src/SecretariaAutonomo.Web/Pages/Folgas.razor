@@ -1,0 +1,212 @@
+@page "/folgas"
+@attribute [Authorize]
+@inject ApiClient Api
+@inject ProvedorAutenticacao Autenticacao
+@inject ISnackbar Snackbar
+
+<PageTitle>Folgas e férias</PageTitle>
+
+<MudGrid>
+    <MudItem xs="12" md="5">
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.h6">Bloquear agenda</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                Nesse período ninguém consegue agendar com você, nem pela página pública.
+            </MudText>
+
+            <MudRadioGroup T="bool" @bind-Value="_diaInteiro">
+                <MudRadio T="bool" Value="true" Color="Color.Primary">Dia(s) inteiro(s)</MudRadio>
+                <MudRadio T="bool" Value="false" Color="Color.Primary">Só algumas horas</MudRadio>
+            </MudRadioGroup>
+
+            @if (_diaInteiro)
+            {
+                <MudDateRangePicker @bind-DateRange="_periodo" Label="De / até" MinDate="DateTime.Today"
+                                    DateFormat="dd/MM/yyyy" Class="mt-3" />
+            }
+            else
+            {
+                <MudDatePicker @bind-Date="_dia" Label="Dia" MinDate="DateTime.Today" DateFormat="dd/MM/yyyy" Class="mt-3" />
+                <MudStack Row="true" Spacing="2">
+                    <MudTimePicker @bind-Time="_horaInicio" Label="Das" AmPm="false" />
+                    <MudTimePicker @bind-Time="_horaFim" Label="Até" AmPm="false" />
+                </MudStack>
+            }
+
+            <MudTextField @bind-Value="_motivo" Label="Motivo (opcional)" Placeholder="Férias, consulta médica, curso..."
+                          MaxLength="200" Class="mt-3" />
+
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Class="mt-4"
+                       StartIcon="@Icons.Material.Filled.Block" OnClick="Bloquear" Disabled="@(_salvando || !Preenchido)">
+                Bloquear
+            </MudButton>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="7">
+        @if (_afetados.Count > 0)
+        {
+            <MudAlert Severity="Severity.Warning" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="@(() => _afetados.Clear())">
+                <MudText Typo="Typo.subtitle2">
+                    Você tem @_afetados.Count @(_afetados.Count == 1 ? "cliente marcado" : "clientes marcados") nesse período.
+                </MudText>
+                <MudText Typo="Typo.body2" Class="mb-2">
+                    Os horários não foram cancelados automaticamente. Avise pelo WhatsApp e cancele se for o caso.
+                </MudText>
+                @foreach (var a in _afetados)
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudText Typo="Typo.body2" Style="flex: 1">
+                            <b>@Formatacao.Periodo(a.Inicio, a.Fim, _fuso)</b> · @a.Cliente · @a.Servico
+                        </MudText>
+                        <MudIconButton Icon="@Icons.Custom.Brands.WhatsApp" Size="Size.Small" aria-label="Abrir conversa"
+                                       Href="@($"https://wa.me/{a.TelefoneCliente}")" Target="_blank" />
+                        <MudButton Size="Size.Small" Color="Color.Error" OnClick="@(() => CancelarAgendamento(a))">Cancelar</MudButton>
+                    </MudStack>
+                }
+            </MudAlert>
+        }
+
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.h6" Class="mb-2">Próximos bloqueios</MudText>
+
+            @if (_carregando)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+            }
+            else if (_bloqueios.Count == 0)
+            {
+                <MudText Color="Color.Secondary">Nenhuma folga ou férias marcada.</MudText>
+            }
+            else
+            {
+                <MudList T="string" Dense="true">
+                    @foreach (var b in _bloqueios)
+                    {
+                        <MudListItem T="string" Icon="@Icons.Material.Filled.EventBusy">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                <div>
+                                    <MudText><b>@Formatacao.Periodo(b.Inicio, b.Fim, _fuso)</b></MudText>
+                                    @if (b.Motivo is not null)
+                                    {
+                                        <MudText Typo="Typo.caption">@b.Motivo</MudText>
+                                    }
+                                </div>
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                               aria-label="Remover bloqueio" OnClick="@(() => Remover(b))" />
+                            </MudStack>
+                        </MudListItem>
+                    }
+                </MudList>
+            }
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private TimeZoneInfo _fuso = TimeZoneInfo.Local;
+    private Guid _profissionalId;
+    private List<BloqueioDto> _bloqueios = [];
+    private List<AgendamentoDto> _afetados = [];
+    private bool _carregando = true;
+    private bool _salvando;
+
+    private bool _diaInteiro = true;
+    private DateRange? _periodo;
+    private DateTime? _dia = DateTime.Today;
+    private TimeSpan? _horaInicio = new(14, 0, 0);
+    private TimeSpan? _horaFim = new(16, 0, 0);
+    private string? _motivo;
+
+    private bool Preenchido => _diaInteiro
+        ? _periodo?.Start is not null && _periodo.End is not null
+        : _dia is not null && _horaInicio is not null && _horaFim is not null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _fuso = Formatacao.Fuso(Autenticacao.Conta);
+        if (Autenticacao.Conta?.ProfissionalId is not { } profissionalId)
+        {
+            Snackbar.Add("Sua conta não está ligada a um profissional.", Severity.Error);
+            _carregando = false;
+            return;
+        }
+
+        _profissionalId = profissionalId;
+        await Carregar();
+    }
+
+    private async Task Carregar()
+    {
+        _carregando = true;
+        try
+        {
+            _bloqueios = await Api.ListarBloqueiosAsync(_profissionalId);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _carregando = false;
+        }
+    }
+
+    private async Task Bloquear()
+    {
+        // Dia inteiro: da meia-noite do primeiro dia até a meia-noite do dia seguinte ao último.
+        var (inicio, fim) = _diaInteiro
+            ? (Formatacao.ParaUtc(_periodo!.Start!.Value, TimeSpan.Zero, _fuso),
+               Formatacao.ParaUtc(_periodo.End!.Value.AddDays(1), TimeSpan.Zero, _fuso))
+            : (Formatacao.ParaUtc(_dia!.Value, _horaInicio!.Value, _fuso),
+               Formatacao.ParaUtc(_dia.Value, _horaFim!.Value, _fuso));
+
+        _salvando = true;
+        try
+        {
+            var criado = await Api.CriarBloqueioAsync(_profissionalId, new SalvarBloqueioRequest(inicio, fim, _motivo));
+            _afetados = criado.AgendamentosNoPeriodo.ToList();
+            Snackbar.Add("Agenda bloqueada.", Severity.Success);
+            _periodo = null;
+            _motivo = null;
+            await Carregar();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _salvando = false;
+        }
+    }
+
+    private async Task Remover(BloqueioDto bloqueio)
+    {
+        try
+        {
+            await Api.RemoverBloqueioAsync(_profissionalId, bloqueio.Id);
+            Snackbar.Add("Bloqueio removido. Os horários voltaram a ficar disponíveis.", Severity.Info);
+            await Carregar();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task CancelarAgendamento(AgendamentoDto agendamento)
+    {
+        try
+        {
+            await Api.CancelarAgendamentoAsync(agendamento.Id);
+            _afetados.Remove(agendamento);
+            Snackbar.Add($"Horário de {agendamento.Cliente} cancelado.", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

@@ -1,0 +1,218 @@
+@page "/agendar/{Slug}"
+@layout PublicoLayout
+@inject ApiClient Api
+@inject ISnackbar Snackbar
+
+<PageTitle>@(_pagina?.Nome ?? "Agendar")</PageTitle>
+
+@if (_erroCarregamento is not null)
+{
+    <MudAlert Severity="Severity.Error">@_erroCarregamento</MudAlert>
+}
+else if (_pagina is null)
+{
+    <MudProgressCircular Indeterminate="true" Color="Color.Primary" Class="d-block mx-auto mt-8" />
+}
+else if (_confirmado is not null)
+{
+    <MudPaper Class="pa-6 text-center">
+        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Style="font-size: 4rem" />
+        <MudText Typo="Typo.h5" Class="mt-2">Agendado!</MudText>
+        <MudText Class="mt-2">
+            @ServicoSelecionado?.Nome em <b>@DataLonga(_confirmado.Inicio)</b>.
+        </MudText>
+        <MudText Typo="Typo.body2" Class="mt-2">Você vai receber um lembrete no WhatsApp um dia antes.</MudText>
+    </MudPaper>
+}
+else
+{
+    <MudText Typo="Typo.h4" Align="Align.Center">@_pagina.Nome</MudText>
+    <MudText Align="Align.Center" Class="mb-6" Color="Color.Secondary">Agende seu horário</MudText>
+
+    @if (_pagina.LinkWhatsApp is { } linkWhatsApp)
+    {
+        <MudButton Href="@linkWhatsApp" Target="_blank" Variant="Variant.Outlined" Color="Color.Success" FullWidth="true"
+                   StartIcon="@Icons.Custom.Brands.WhatsApp" Class="mb-6">
+            Prefere agendar pelo WhatsApp?
+        </MudButton>
+    }
+
+    @* 1. Serviço *@
+    <MudText Typo="Typo.h6" Class="mb-2">1. Escolha o serviço</MudText>
+    <MudStack Spacing="2" Class="mb-6">
+        @foreach (var s in _pagina.Servicos)
+        {
+            <MudPaper Outlined="true" Class="@($"pa-3 cursor-pointer {(s.Id == _servicoId ? "mud-border-primary" : "")}")"
+                      Style="@(s.Id == _servicoId ? "border-width: 2px" : "")"
+                      @onclick="@(() => EscolherServico(s.Id))">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                    <div>
+                        <MudText><b>@s.Nome</b></MudText>
+                        <MudText Typo="Typo.caption">@s.DuracaoMinutos min</MudText>
+                    </div>
+                    <MudText Color="Color.Primary"><b>@s.Preco.ToString("C")</b></MudText>
+                </MudStack>
+            </MudPaper>
+        }
+    </MudStack>
+
+    @if (_servicoId is not null)
+    {
+        @if (_pagina.Profissionais.Count > 1)
+        {
+            <MudSelect T="Guid?" Label="Profissional" Value="_profissionalId" Variant="Variant.Outlined" Class="mb-4"
+                       ValueChanged="@(async (Guid? v) => { _profissionalId = v; await CarregarHorarios(); })">
+                @foreach (var p in _pagina.Profissionais)
+                {
+                    <MudSelectItem T="Guid?" Value="p.Id">@p.Nome</MudSelectItem>
+                }
+            </MudSelect>
+        }
+
+        @* 2. Dia e horário *@
+        <MudText Typo="Typo.h6" Class="mb-2">2. Escolha o dia e o horário</MudText>
+        <div class="d-flex gap-2 pb-2 mb-3" style="overflow-x: auto">
+            @foreach (var dia in _dias)
+            {
+                <MudButton Variant="@(dia == _dia ? Variant.Filled : Variant.Outlined)" Color="Color.Primary"
+                           Style="min-width: 64px; flex-direction: column" OnClick="@(() => EscolherDia(dia))">
+                    <span style="font-size: .7rem; text-transform: uppercase">@dia.ToString("ddd")</span>
+                    <span style="font-size: 1.1rem">@dia.Day</span>
+                </MudButton>
+            }
+        </div>
+
+        @if (_carregandoHorarios)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else if (_horarios.Count == 0)
+        {
+            <MudText Color="Color.Secondary" Class="mb-6">Sem horários livres neste dia. Tente outro.</MudText>
+        }
+        else
+        {
+            <div class="d-flex flex-wrap gap-2 mb-6">
+                @foreach (var h in _horarios)
+                {
+                    <MudButton Variant="@(h == _horario ? Variant.Filled : Variant.Outlined)" Color="Color.Primary"
+                               OnClick="@(() => _horario = h)">
+                        @Formatacao.Hora(h.Inicio, _fuso)
+                    </MudButton>
+                }
+            </div>
+        }
+    }
+
+    @if (_horario is not null)
+    {
+        @* 3. Dados *@
+        <MudText Typo="Typo.h6" Class="mb-2">3. Seus dados</MudText>
+        <MudTextField @bind-Value="_nome" Label="Seu nome" Variant="Variant.Outlined" Class="mb-3" />
+        <MudTextField @bind-Value="_telefone" Label="WhatsApp (com DDD)" Variant="Variant.Outlined"
+                      InputType="InputType.Telephone" Placeholder="(11) 99999-8888" />
+
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Size="Size.Large" Class="mt-6"
+                   Disabled="@(_salvando || string.IsNullOrWhiteSpace(_nome) || string.IsNullOrWhiteSpace(_telefone))"
+                   OnClick="Confirmar">
+            Confirmar @DataLonga(_horario.Inicio)
+        </MudButton>
+    }
+}
+
+@code {
+    [Parameter] public required string Slug { get; set; }
+
+    private PaginaPublicaDto? _pagina;
+    private string? _erroCarregamento;
+    private TimeZoneInfo _fuso = TimeZoneInfo.Local;
+
+    private readonly List<DateOnly> _dias = [];
+    private Guid? _servicoId;
+    private Guid? _profissionalId;
+    private DateOnly _dia;
+    private List<HorarioDisponivelDto> _horarios = [];
+    private HorarioDisponivelDto? _horario;
+    private bool _carregandoHorarios;
+
+    private string? _nome;
+    private string? _telefone;
+    private bool _salvando;
+    private HorarioDisponivelDto? _confirmado;
+
+    private ServicoDto? ServicoSelecionado => _pagina?.Servicos.FirstOrDefault(s => s.Id == _servicoId);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _pagina = await Api.ObterPaginaPublicaAsync(Slug);
+            _fuso = TimeZoneInfo.FindSystemTimeZoneById(_pagina.FusoHorario);
+            _profissionalId = _pagina.Profissionais.FirstOrDefault()?.Id;
+
+            var hoje = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, _fuso).DateTime);
+            for (var i = 0; i < 21; i++)
+                _dias.Add(hoje.AddDays(i));
+            _dia = hoje;
+        }
+        catch (Exception ex)
+        {
+            _erroCarregamento = ex.Message;
+        }
+    }
+
+    private async Task EscolherServico(Guid id)
+    {
+        _servicoId = id;
+        await CarregarHorarios();
+    }
+
+    private async Task EscolherDia(DateOnly dia)
+    {
+        _dia = dia;
+        await CarregarHorarios();
+    }
+
+    private async Task CarregarHorarios()
+    {
+        _horario = null;
+        if (_servicoId is not { } servico || _profissionalId is not { } profissional)
+            return;
+
+        _carregandoHorarios = true;
+        try
+        {
+            _horarios = await Api.ListarDisponibilidadePublicaAsync(Slug, profissional, servico, _dia);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _carregandoHorarios = false;
+        }
+    }
+
+    private async Task Confirmar()
+    {
+        _salvando = true;
+        try
+        {
+            _confirmado = await Api.AgendarPublicoAsync(Slug, new AgendamentoPublicoRequest(
+                _profissionalId!.Value, _servicoId!.Value, _horario!.Inicio, _nome!, _telefone!));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            await CarregarHorarios();
+        }
+        finally
+        {
+            _salvando = false;
+        }
+    }
+
+    private string DataLonga(DateTimeOffset data) =>
+        TimeZoneInfo.ConvertTime(data, _fuso).ToString("dddd, dd/MM 'às' HH:mm");
+}
