@@ -55,8 +55,19 @@
                         <MudTd DataLabel="Status">
                             @{ var (texto, cor) = Formatacao.Status(context.Status); }
                             <MudChip T="string" Size="Size.Small" Color="cor">@texto</MudChip>
+                            @if (context.ValorRecebido is { } recebido)
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Success" Class="d-block">Recebido @recebido.ToString("C")</MudText>
+                            }
                         </MudTd>
                         <MudTd>
+                            @if (context.ValorRecebido is null && context.Status is "Pendente" or "Confirmado" or "Concluido")
+                            {
+                                <MudTooltip Text="Recebi">
+                                    <MudIconButton Icon="@Icons.Material.Filled.AttachMoney" Color="Color.Success" Size="Size.Small"
+                                                   aria-label="Registrar recebimento" OnClick="@(() => Receber(context))" />
+                                </MudTooltip>
+                            }
                             @if (context.Status == "Pendente")
                             {
                                 <MudTooltip Text="Confirmar">
@@ -262,6 +273,20 @@
         };
         var dialogo = await Dialogos.ShowAsync<AgendamentoDialog>(null, parametros,
             new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true });
+
+        if (await dialogo.Result is { Canceled: false })
+            await CarregarDia();
+    }
+
+    private async Task Receber(AgendamentoDto agendamento)
+    {
+        var parametros = new DialogParameters<RecebimentoDialog>
+        {
+            { x => x.Agendamento, agendamento },
+            { x => x.ValorSugerido, _servicos.FirstOrDefault(s => s.Id == agendamento.ServicoId)?.Preco ?? 0 },
+        };
+        var dialogo = await Dialogos.ShowAsync<RecebimentoDialog>(null, parametros,
+            new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true, CloseButton = true });
 
         if (await dialogo.Result is { Canceled: false })
             await CarregarDia();

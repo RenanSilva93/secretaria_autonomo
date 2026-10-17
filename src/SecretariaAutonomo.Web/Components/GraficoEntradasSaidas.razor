@@ -1,0 +1,153 @@
+@using System.Globalization
+
+@* Barras agrupadas de entradas x saídas por mês, com tooltip ao passar o mouse, tocar ou focar com o teclado. *@
+<div class="grafico-financeiro">
+    <div class="d-flex gap-4 mb-2" aria-hidden="true">
+        <span class="legenda"><span class="amostra" style="background: @CorEntradas"></span>Entradas</span>
+        <span class="legenda"><span class="amostra" style="background: @CorSaidas"></span>Saídas</span>
+    </div>
+
+    <div class="rolagem">
+        <div class="area" style="min-width: @(Largura)px">
+            <svg viewBox="0 0 @Largura @Altura" width="100%" role="img" aria-label="@Descricao" @onmouseleave="@(() => _ativo = null)">
+                @foreach (var valor in _marcas)
+                {
+                    var y = Y(valor);
+                    <line x1="@F(MargemEsquerda)" x2="@F(Largura - MargemDireita)" y1="@F(y)" y2="@F(y)" class="grade" />
+                    <!text x="@F(MargemEsquerda - 8)" y="@F(y)" class="eixo" text-anchor="end" dominant-baseline="middle">@Abreviar(valor)</!text>
+                }
+
+                @for (var i = 0; i < Meses.Count; i++)
+                {
+                    var indice = i;
+                    var mes = Meses[i];
+                    var x = MargemEsquerda + i * LarguraGrupo;
+                    var centro = x + LarguraGrupo / 2;
+
+                    @if (_ativo == indice)
+                    {
+                        <rect x="@F(x + 2)" y="@F(MargemTopo)" width="@F(LarguraGrupo - 4)" height="@F(AlturaPlot)" class="destaque" rx="4" />
+                    }
+
+                    <path d="@Barra(centro - 1 - LarguraBarra, mes.Entradas)" fill="@CorEntradas" />
+                    <path d="@Barra(centro + 1, mes.Saidas)" fill="@CorSaidas" />
+
+                    <!text x="@F(centro)" y="@F(Altura - MargemBase + 16)" class="eixo" text-anchor="middle">@NomeCurto(mes)</!text>
+                    @if (i == 0 || mes.Mes == 1)
+                    {
+                        <!text x="@F(centro)" y="@F(Altura - MargemBase + 30)" class="eixo ano" text-anchor="middle">@mes.Ano</!text>
+                    }
+
+                    @* Área de toque maior que as barras: a coluna inteira do mês. *@
+                    <rect x="@F(x)" y="0" width="@F(LarguraGrupo)" height="@F(Altura)" fill="transparent" tabindex="0"
+                          aria-label="@TextoMes(mes)"
+                          @onmouseenter="@(() => _ativo = indice)" @onclick="@(() => _ativo = indice)"
+                          @onfocus="@(() => _ativo = indice)" @onblur="@(() => _ativo = null)" />
+                }
+
+                <line x1="@F(MargemEsquerda)" x2="@F(Largura - MargemDireita)" y1="@F(Base)" y2="@F(Base)" class="linha-base" />
+            </svg>
+
+            @if (_ativo is { } a && a < Meses.Count)
+            {
+                var mes = Meses[a];
+                // Fica ao lado da coluna do mês (nunca por cima das barras), do lado com mais espaço.
+                var aDireita = a < Meses.Count / 2.0;
+                var bordaPct = (MargemEsquerda + (aDireita ? a + 1 : a) * LarguraGrupo) / Largura * 100;
+                <div class="dica" style="left: @F(bordaPct)%; transform: translateX(@(aDireita ? "8px" : "calc(-100% - 8px)"))">
+                    <div class="titulo">@NomeLongo(mes)</div>
+                    <div class="linha"><span class="amostra" style="background: @CorEntradas"></span>Entradas<b>@mes.Entradas.ToString("C")</b></div>
+                    <div class="linha"><span class="amostra" style="background: @CorSaidas"></span>Saídas<b>@mes.Saidas.ToString("C")</b></div>
+                    <div class="linha saldo">Saldo<b class="@(mes.Saldo < 0 ? "negativo" : "")">@mes.Saldo.ToString("C")</b></div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<EvolucaoMensalDto> Meses { get; set; } = [];
+    [CascadingParameter(Name = "ModoEscuro")] public bool ModoEscuro { get; set; }
+
+    // Verde-água x laranja: mantém a leitura "entra / sai" e, ao contrário de verde x vermelho,
+    // continua distinguível para daltônicos. Tons próprios para cada tema, validados contra o fundo.
+    private string CorEntradas => ModoEscuro ? "#199e70" : "#1baf7a";
+    private string CorSaidas => ModoEscuro ? "#d95926" : "#eb6834";
+
+    private const double Altura = 300, MargemTopo = 12, MargemBase = 40, MargemEsquerda = 56, MargemDireita = 8;
+    private const double LarguraMinimaGrupo = 44;
+
+    private int? _ativo;
+    private List<decimal> _marcas = [0];
+    private decimal _maximo = 1;
+
+    /// <summary>Largura do desenho: ocupa a tela, mas com muitos meses cresce e o gráfico rola na horizontal.</summary>
+    private double Largura => Math.Max(640, MargemEsquerda + MargemDireita + Meses.Count * LarguraMinimaGrupo);
+    private double LarguraGrupo => (Largura - MargemEsquerda - MargemDireita) / Math.Max(1, Meses.Count);
+    private double LarguraBarra => Math.Min(22, (LarguraGrupo * 0.72 - 2) / 2);
+    private double AlturaPlot => Altura - MargemTopo - MargemBase;
+    private double Base => MargemTopo + AlturaPlot;
+
+    protected override void OnParametersSet()
+    {
+        _ativo = null;
+        var maior = Meses.Count == 0 ? 0 : Meses.Max(m => Math.Max(m.Entradas, m.Saidas));
+        var passo = PassoRedondo(maior / 4);
+        _maximo = passo * Math.Max(1, Math.Ceiling(maior / passo));
+        _marcas = [];
+        for (var v = 0m; v <= _maximo; v += passo)
+            _marcas.Add(v);
+    }
+
+    /// <summary>1, 2, 2,5 ou 5 × 10ⁿ: marcas do eixo em números "de gente" (R$ 500, R$ 1 mil, R$ 2,5 mil...).</summary>
+    private static decimal PassoRedondo(decimal bruto)
+    {
+        if (bruto <= 0)
+            return 100;
+        var potencia = (decimal)Math.Pow(10, Math.Floor(Math.Log10((double)bruto)));
+        foreach (var fator in new[] { 1m, 2m, 2.5m, 5m, 10m })
+            if (fator * potencia >= bruto)
+                return fator * potencia;
+        return 10 * potencia;
+    }
+
+    private double Y(decimal valor) => Base - (double)(valor / _maximo) * AlturaPlot;
+
+    /// <summary>Barra presa na linha de base, com só as pontas de cima arredondadas.</summary>
+    private string Barra(double x, decimal valor)
+    {
+        if (valor <= 0)
+            return "";
+        var topo = Y(valor);
+        var altura = Base - topo;
+        var r = Math.Min(4, Math.Min(altura, LarguraBarra / 2));
+        var w = LarguraBarra;
+        return $"M{F(x)},{F(Base)} V{F(topo + r)} Q{F(x)},{F(topo)} {F(x + r)},{F(topo)} " +
+               $"H{F(x + w - r)} Q{F(x + w)},{F(topo)} {F(x + w)},{F(topo + r)} V{F(Base)} Z";
+    }
+
+    private static readonly CultureInfo PtBr = CultureInfo.GetCultureInfo("pt-BR");
+
+    private static string NomeCurto(EvolucaoMensalDto m) => PtBr.DateTimeFormat.GetAbbreviatedMonthName(m.Mes).TrimEnd('.');
+
+    private static string NomeLongo(EvolucaoMensalDto m)
+    {
+        var nome = PtBr.DateTimeFormat.GetMonthName(m.Mes);
+        return $"{char.ToUpper(nome[0])}{nome[1..]} de {m.Ano}";
+    }
+
+    private static string TextoMes(EvolucaoMensalDto m) =>
+        $"{NomeLongo(m)}: entradas {m.Entradas.ToString("C", PtBr)}, saídas {m.Saidas.ToString("C", PtBr)}, saldo {m.Saldo.ToString("C", PtBr)}";
+
+    private string Descricao => $"Gráfico de barras com entradas e saídas de {Meses.Count} meses. Os valores de cada mês estão na tabela abaixo.";
+
+    private static string Abreviar(decimal valor) => valor switch
+    {
+        >= 1_000_000 => $"R$ {(valor / 1_000_000).ToString("0.#", PtBr)} mi",
+        >= 1_000 => $"R$ {(valor / 1_000).ToString("0.#", PtBr)} mil",
+        _ => $"R$ {valor.ToString("0", PtBr)}",
+    };
+
+    /// <summary>SVG usa ponto decimal, independentemente da cultura do navegador.</summary>
+    private static string F(double v) => v.ToString("0.##", CultureInfo.InvariantCulture);
+}

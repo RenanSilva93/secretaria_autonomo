@@ -1,0 +1,130 @@
+@inject ApiClient Api
+@inject ISnackbar Snackbar
+
+@* Cria ou edita um lançamento do financeiro. Fecha com Ok(true) depois de salvar. *@
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(Lancamento is null ? (Entrada ? "Nova entrada" : "Nova saída") : "Editar lançamento")</MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (Lancamento?.AgendamentoId is null)
+        {
+            <MudToggleGroup T="string" Value="_tipo" ValueChanged="TrocarTipo" Color="@(Entrada ? Color.Success : Color.Error)"
+                            FixedContent="true" Class="mb-3" Style="width: 100%">
+                <MudToggleItem Value="@("Entrada")" Text="Entrada" />
+                <MudToggleItem Value="@("Saida")" Text="Saída" />
+            </MudToggleGroup>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">Recebimento de um atendimento da agenda.</MudAlert>
+        }
+
+        <MudTextField @bind-Value="_descricao" Label="Descrição" MaxLength="200" Immediate="true"
+                      Placeholder="@(Entrada ? "Ex.: Venda de esmalte" : "Ex.: Aluguel da sala")" />
+        <MudNumericField @bind-Value="_valor" Label="Valor" Min="0" Format="N2" Adornment="Adornment.Start" AdornmentText="R$"
+                         Immediate="true" Class="mt-3" />
+        <MudDatePicker @bind-Date="_data" Label="@(_pago ? "Data" : "Vencimento")" DateFormat="dd/MM/yyyy" Class="mt-3" />
+        <MudAutocomplete T="string" @bind-Value="_categoria" Label="Categoria" SearchFunc="BuscarCategorias"
+                         CoerceValue="true" MaxLength="60" Immediate="true" Class="mt-3" />
+        <MudSelect T="string" @bind-Value="_forma" Label="Forma de pagamento" Clearable="true" Class="mt-3">
+            @foreach (var f in Formatacao.FormasPagamento)
+            {
+                <MudSelectItem T="string" Value="f">@Formatacao.FormaPagamento(f)</MudSelectItem>
+            }
+        </MudSelect>
+        <MudSwitch T="bool" @bind-Value="_pago" Color="Color.Primary" Class="mt-3"
+                   Label="@(Entrada ? (_pago ? "Já recebi" : "A receber") : (_pago ? "Já paguei" : "A pagar"))" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancelar</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Salvar" Disabled="@(_salvando || !Preenchido)">Salvar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] public required IMudDialogInstance MudDialog { get; set; }
+
+    /// <summary>Nulo para um lançamento novo.</summary>
+    [Parameter] public LancamentoDto? Lancamento { get; set; }
+
+    [Parameter] public string TipoInicial { get; set; } = "Entrada";
+
+    /// <summary>Categorias já usadas pelo profissional, somadas às sugestões padrão.</summary>
+    [Parameter] public IReadOnlyList<string> Categorias { get; set; } = [];
+
+    private static readonly string[] SugestoesEntrada = ["Atendimento", "Venda de produto", "Outros"];
+    private static readonly string[] SugestoesSaida = ["Material e produtos", "Aluguel", "Transporte", "Alimentação", "Impostos e MEI", "Divulgação", "Equipamentos", "Outros"];
+
+    private string _tipo = "Entrada";
+    private string? _descricao;
+    private decimal _valor;
+    private DateTime? _data = DateTime.Today;
+    private string? _categoria;
+    private string? _forma;
+    private bool _pago = true;
+    private bool _salvando;
+
+    private bool Entrada => _tipo == "Entrada";
+
+    private bool Preenchido => !string.IsNullOrWhiteSpace(_descricao) && !string.IsNullOrWhiteSpace(_categoria) && _valor > 0 && _data is not null;
+
+    protected override void OnInitialized()
+    {
+        if (Lancamento is { } l)
+        {
+            _tipo = l.Tipo;
+            _descricao = l.Descricao;
+            _valor = l.Valor;
+            _data = l.Data.ToDateTime(TimeOnly.MinValue);
+            _categoria = l.Categoria;
+            _forma = l.FormaPagamento;
+            _pago = l.Pago;
+        }
+        else
+        {
+            _tipo = TipoInicial;
+        }
+    }
+
+    private void TrocarTipo(string tipo)
+    {
+        _tipo = tipo;
+        // A categoria padrão de um tipo não faz sentido no outro.
+        if (_categoria is not null && !Categorias.Contains(_categoria))
+            _categoria = null;
+    }
+
+    private Task<IEnumerable<string>> BuscarCategorias(string? texto, CancellationToken ct)
+    {
+        var todas = (Entrada ? SugestoesEntrada : SugestoesSaida).Concat(Categorias).Distinct(StringComparer.OrdinalIgnoreCase);
+        var filtradas = string.IsNullOrWhiteSpace(texto)
+            ? todas
+            : todas.Where(c => c.Contains(texto.Trim(), StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(filtradas);
+    }
+
+    private async Task Salvar()
+    {
+        _salvando = true;
+        try
+        {
+            var req = new SalvarLancamentoRequest(_tipo, _descricao!, _valor, DateOnly.FromDateTime(_data!.Value), _categoria!, _forma, _pago);
+            if (Lancamento is null)
+                await Api.CriarLancamentoAsync(req);
+            else
+                await Api.AtualizarLancamentoAsync(Lancamento.Id, req);
+
+            Snackbar.Add("Lançamento salvo!", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _salvando = false;
+        }
+    }
+}

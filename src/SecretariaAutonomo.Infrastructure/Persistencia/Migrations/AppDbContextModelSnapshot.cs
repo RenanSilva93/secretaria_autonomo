@@ -353,6 +353,60 @@ namespace SecretariaAutonomo.Infrastructure.Persistencia.Migrations
                     b.ToTable("HorariosTrabalho");
                 });
 
+            modelBuilder.Entity("SecretariaAutonomo.Domain.Entidades.Lancamento", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AgendamentoId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Categoria")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<DateTimeOffset>("CriadoEm")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("Data")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Descricao")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("FormaPagamento")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<bool>("Pago")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<decimal>("Valor")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgendamentoId")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "Data");
+
+                    b.ToTable("Lancamentos");
+                });
+
             modelBuilder.Entity("SecretariaAutonomo.Domain.Entidades.MensagemWhatsApp", b =>
                 {
                     b.Property<Guid>("Id")
@@ -645,6 +699,21 @@ namespace SecretariaAutonomo.Infrastructure.Persistencia.Migrations
                         .HasForeignKey("ProfissionalId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("SecretariaAutonomo.Domain.Entidades.Lancamento", b =>
+                {
+                    b.HasOne("SecretariaAutonomo.Domain.Entidades.Agendamento", "Agendamento")
+                        .WithOne("Recebimento")
+                        .HasForeignKey("SecretariaAutonomo.Domain.Entidades.Lancamento", "AgendamentoId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Agendamento");
+                });
+
+            modelBuilder.Entity("SecretariaAutonomo.Domain.Entidades.Agendamento", b =>
+                {
+                    b.Navigation("Recebimento");
                 });
 
             modelBuilder.Entity("SecretariaAutonomo.Domain.Entidades.Profissional", b =>

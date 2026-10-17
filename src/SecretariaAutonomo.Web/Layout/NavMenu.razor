@@ -1,10 +1,15 @@
 @inject ProvedorAutenticacao Autenticacao
+@inject NavigationManager Navigation
 
 <MudNavMenu>
     <MudNavLink Href="" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.CalendarToday">Agenda do dia</MudNavLink>
     <MudNavLink Href="semana" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.ViewWeek">Semana</MudNavLink>
     <MudNavLink Href="clientes" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.People">Clientes</MudNavLink>
-    <MudNavLink Href="servicos" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.ContentCut">Serviços</MudNavLink>
+    <MudNavGroup Title="Financeiro" Icon="@Icons.Material.Filled.AccountBalanceWallet" @bind-Expanded="_financeiroAberto">
+        <MudNavLink Href="financeiro" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.ReceiptLong">Lançamentos</MudNavLink>
+        <MudNavLink Href="financeiro/evolucao" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.BarChart">Evolução mensal</MudNavLink>
+    </MudNavGroup>
+    <MudNavLink Href="servicos"Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.ContentCut">Serviços</MudNavLink>
     <MudNavLink Href="horarios" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Schedule">Horários de trabalho</MudNavLink>
     <MudNavLink Href="folgas" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.BeachAccess">Folgas e férias</MudNavLink>
     @if (Autenticacao.Conta is { } conta)
@@ -15,3 +20,11 @@
         </MudNavLink>
     }
 </MudNavMenu>
+
+@code {
+    // Abre o grupo quando a página atual é do financeiro (ex.: link direto ou F5).
+    private bool _financeiroAberto;
+
+    protected override void OnInitialized() =>
+        _financeiroAberto = Navigation.ToBaseRelativePath(Navigation.Uri).StartsWith("financeiro", StringComparison.OrdinalIgnoreCase);
+}

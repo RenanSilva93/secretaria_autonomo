@@ -1,0 +1,139 @@
+@page "/financeiro/evolucao"
+@attribute [Authorize]
+@using System.Globalization
+@inject ApiClient Api
+@inject ISnackbar Snackbar
+
+<PageTitle>Evolução mensal</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap" Class="mb-4">
+    <div>
+        <MudText Typo="Typo.h5">Evolução mensal</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">Entradas x saídas já pagas, mês a mês.</MudText>
+    </div>
+    <MudToggleGroup T="int" Value="_meses" ValueChanged="TrocarPeriodo" Color="Color.Primary" Size="Size.Small">
+        <MudToggleItem Value="6" Text="6 meses" />
+        <MudToggleItem Value="12" Text="12 meses" />
+        <MudToggleItem Value="24" Text="24 meses" />
+    </MudToggleGroup>
+</MudStack>
+
+<MudGrid Spacing="3" Class="mb-1">
+    <MudItem xs="6" md="3">
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.caption">Entradas no período</MudText>
+            <MudText Typo="Typo.h6">@Entradas.ToString("C")</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" md="3">
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.caption">Saídas no período</MudText>
+            <MudText Typo="Typo.h6">@Saidas.ToString("C")</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" md="3">
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.caption">Saldo do período</MudText>
+            <MudText Typo="Typo.h6" Color="@(Entradas - Saidas < 0 ? Color.Error : Color.Default)">@((Entradas - Saidas).ToString("C"))</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" md="3">
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.caption">Saldo médio por mês</MudText>
+            <MudText Typo="Typo.h6">@MediaSaldo.ToString("C")</MudText>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<MudPaper Class="pa-4 mb-4">
+    @if (_carregando)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_evolucao.All(m => m.Entradas == 0 && m.Saidas == 0))
+    {
+        <MudText Color="Color.Secondary">
+            Nenhuma entrada ou saída paga nesse período. Lance em <MudLink Href="financeiro">Lançamentos</MudLink>
+            ou use o botão "Recebi" na agenda.
+        </MudText>
+    }
+    else
+    {
+        <GraficoEntradasSaidas Meses="_evolucao" />
+    }
+</MudPaper>
+
+<MudPaper Class="pa-4">
+    <MudText Typo="Typo.h6">Mês a mês</MudText>
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-2">Valores em R$</MudText>
+    <MudTable Items="MaisRecentesPrimeiro" Dense="true" Hover="true" Elevation="0" Breakpoint="Breakpoint.None" Loading="_carregando"
+              HorizontalScrollbar="true" Class="tabela-compacta">
+        <HeaderContent>
+            <MudTh>Mês</MudTh>
+            <MudTh Style="text-align: right">Entradas</MudTh>
+            <MudTh Style="text-align: right">Saídas</MudTh>
+            <MudTh Style="text-align: right">Saldo</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Mês">@NomeDoMes(context)</MudTd>
+            <MudTd DataLabel="Entradas" Style="text-align: right">@context.Entradas.ToString("N2")</MudTd>
+            <MudTd DataLabel="Saídas" Style="text-align: right">@context.Saidas.ToString("N2")</MudTd>
+            <MudTd DataLabel="Saldo" Style="text-align: right">
+                <MudText Typo="Typo.body2" Color="@(context.Saldo < 0 ? Color.Error : Color.Default)"><b>@context.Saldo.ToString("N2")</b></MudText>
+            </MudTd>
+        </RowTemplate>
+        <FooterContent>
+            <MudTd><b>Total</b></MudTd>
+            <MudTd Style="text-align: right"><b>@Entradas.ToString("N2")</b></MudTd>
+            <MudTd Style="text-align: right"><b>@Saidas.ToString("N2")</b></MudTd>
+            <MudTd Style="text-align: right"><b>@((Entradas - Saidas).ToString("N2"))</b></MudTd>
+        </FooterContent>
+    </MudTable>
+</MudPaper>
+
+@code {
+    private int _meses = 12;
+    private List<EvolucaoMensalDto> _evolucao = [];
+    private bool _carregando = true;
+
+    private decimal Entradas => _evolucao.Sum(m => m.Entradas);
+    private decimal Saidas => _evolucao.Sum(m => m.Saidas);
+    private decimal MediaSaldo => _evolucao.Count == 0 ? 0 : (Entradas - Saidas) / _evolucao.Count;
+
+    private IEnumerable<EvolucaoMensalDto> MaisRecentesPrimeiro => Enumerable.Reverse(_evolucao);
+
+    protected override Task OnInitializedAsync() => Carregar();
+
+    private async Task TrocarPeriodo(int meses)
+    {
+        _meses = meses;
+        await Carregar();
+    }
+
+    private async Task Carregar()
+    {
+        _carregando = true;
+        try
+        {
+            // Termina no mês atual e volta N-1 meses.
+            var hoje = DateOnly.FromDateTime(DateTime.Today);
+            var mesAtual = new DateOnly(hoje.Year, hoje.Month, 1);
+            _evolucao = await Api.ObterEvolucaoMensalAsync(mesAtual.AddMonths(1 - _meses), mesAtual);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _carregando = false;
+        }
+    }
+
+    /// <summary>"Out/2026": curto para a tabela caber no celular sem virar cartões.</summary>
+    private static string NomeDoMes(EvolucaoMensalDto m)
+    {
+        var nome = CultureInfo.GetCultureInfo("pt-BR").DateTimeFormat.GetAbbreviatedMonthName(m.Mes).TrimEnd('.');
+        return $"{char.ToUpper(nome[0])}{nome[1..]}/{m.Ano}";
+    }
+}

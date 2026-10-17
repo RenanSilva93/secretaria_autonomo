@@ -62,4 +62,16 @@ public static class Formatacao
         "NaoCompareceu" => ("Não compareceu", Color.Error),
         _ => (status, Color.Default),
     };
+
+    /// <summary>Valores aceitos pela API, na ordem em que aparecem nos formulários.</summary>
+    public static readonly string[] FormasPagamento = ["Pix", "Dinheiro", "CartaoDebito", "CartaoCredito", "Transferencia", "Outro"];
+
+    public static string FormaPagamento(string? forma) => forma switch
+    {
+        null => "",
+        "CartaoDebito" => "Cartão de débito",
+        "CartaoCredito" => "Cartão de crédito",
+        "Transferencia" => "Transferência",
+        _ => forma,
+    };
 }

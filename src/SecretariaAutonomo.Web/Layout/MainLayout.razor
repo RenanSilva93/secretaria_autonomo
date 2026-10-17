@@ -29,7 +29,10 @@
 
     <MudMainContent Class="pt-16 pa-4">
         <MudContainer MaxWidth="MaxWidth.Large" Class="pa-0">
-            @Body
+            @* Gráficos escolhem as cores da série conforme o tema. *@
+            <CascadingValue Value="_modoEscuro" Name="ModoEscuro">
+                @Body
+            </CascadingValue>
         </MudContainer>
     </MudMainContent>
 </MudLayout>

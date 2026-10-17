@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using SecretariaAutonomo.Application.Abstracoes;
 using SecretariaAutonomo.Application.Agenda;
 using SecretariaAutonomo.Application.Comum;
+using SecretariaAutonomo.Application.Financeiro;
 using SecretariaAutonomo.Application.WhatsApp;
 using SecretariaAutonomo.Contracts;
 using SecretariaAutonomo.Domain.Entidades;
@@ -26,6 +27,7 @@ public static class PainelEndpoints
         MapAgendamentos(api.MapGroup("/agendamentos"));
         MapHorarios(api.MapGroup("/profissionais/{profissionalId:guid}/horarios"));
         MapBloqueios(api.MapGroup("/profissionais/{profissionalId:guid}/bloqueios"));
+        MapFinanceiro(api.MapGroup("/financeiro"));
 
         api.MapGet("/disponibilidade", (Guid profissionalId, Guid servicoId, DateOnly data, AgendaService agenda, CancellationToken ct) =>
             agenda.ObterHorariosDisponiveisAsync(profissionalId, servicoId, data, ct));
@@ -155,6 +157,37 @@ public static class PainelEndpoints
 
         grupo.MapPost("/{id:guid}/confirmar", (Guid id, AgendaService agenda, CancellationToken ct) => agenda.ConfirmarAsync(id, ct));
         grupo.MapPost("/{id:guid}/cancelar", (Guid id, AgendaService agenda, CancellationToken ct) => agenda.CancelarAsync(id, ct));
+        grupo.MapPost("/{id:guid}/receber", (Guid id, ReceberAgendamentoRequest req, FinanceiroService financeiro, CancellationToken ct) =>
+            financeiro.ReceberAtendimentoAsync(id, req, ct));
+    }
+
+    private static void MapFinanceiro(RouteGroupBuilder grupo)
+    {
+        grupo.MapGet("/", (DateOnly de, DateOnly ate, FinanceiroService financeiro, CancellationToken ct) =>
+            financeiro.ObterExtratoAsync(de, ate, ct));
+
+        grupo.MapGet("/evolucao", (DateOnly de, DateOnly ate, FinanceiroService financeiro, CancellationToken ct) =>
+            financeiro.ObterEvolucaoMensalAsync(de, ate, ct));
+
+        grupo.MapGet("/categorias",(FinanceiroService financeiro, CancellationToken ct) => financeiro.ListarCategoriasAsync(ct));
+
+        grupo.MapPost("/lancamentos", async (SalvarLancamentoRequest req, FinanceiroService financeiro, CancellationToken ct) =>
+        {
+            var criado = await financeiro.CriarAsync(req, ct);
+            return Results.Created($"/api/financeiro/lancamentos/{criado.Id}", criado);
+        });
+
+        grupo.MapPut("/lancamentos/{id:guid}", (Guid id, SalvarLancamentoRequest req, FinanceiroService financeiro, CancellationToken ct) =>
+            financeiro.AtualizarAsync(id, req, ct));
+
+        grupo.MapPost("/lancamentos/{id:guid}/pagar", (Guid id, FinanceiroService financeiro, CancellationToken ct) =>
+            financeiro.MarcarComoPagoAsync(id, ct));
+
+        grupo.MapDelete("/lancamentos/{id:guid}", async (Guid id, FinanceiroService financeiro, CancellationToken ct) =>
+        {
+            await financeiro.RemoverAsync(id, ct);
+            return Results.NoContent();
+        });
     }
 
     private static void MapHorarios(RouteGroupBuilder grupo)

@@ -14,6 +14,7 @@ public interface IAppDbContext
     DbSet<Agendamento> Agendamentos { get; }
     DbSet<MensagemWhatsApp> MensagensWhatsApp { get; }
     DbSet<ConversaWhatsApp> ConversasWhatsApp { get; }
+    DbSet<Lancamento> Lancamentos { get; }
 
     Task<int> SaveChangesAsync(CancellationToken ct = default);
 }

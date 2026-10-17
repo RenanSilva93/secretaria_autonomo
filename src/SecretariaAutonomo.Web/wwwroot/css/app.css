@@ -108,3 +108,18 @@ code {
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
     text-align: start;
 }
+
+/* Tabela de valores (Evolução mensal): números numa linha só e colunas mais justas no celular. */
+.tabela-compacta th,
+.tabela-compacta td {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 599px) {
+    .tabela-compacta th,
+    .tabela-compacta td {
+        padding-left: 6px !important;
+        padding-right: 6px !important;
+    }
+}

@@ -23,6 +23,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext
     public DbSet<Agendamento> Agendamentos => Set<Agendamento>();
     public DbSet<MensagemWhatsApp> MensagensWhatsApp => Set<MensagemWhatsApp>();
     public DbSet<ConversaWhatsApp> ConversasWhatsApp => Set<ConversaWhatsApp>();
+    public DbSet<Lancamento> Lancamentos => Set<Lancamento>();
 
     // Lido a cada consulta: o EF avalia a propriedade do DbContext, não um valor fixo.
     private Guid TenantAtual => tenant.TenantId;
@@ -101,6 +102,19 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext
             e.Property(c => c.Estado).HasColumnType("jsonb");
         });
 
+        modelBuilder.Entity<Lancamento>(e =>
+        {
+            e.Property(l => l.Tipo).HasConversion<string>().HasMaxLength(10);
+            e.Property(l => l.FormaPagamento).HasConversion<string>().HasMaxLength(20);
+            e.Property(l => l.Descricao).HasMaxLength(200);
+            e.Property(l => l.Categoria).HasMaxLength(60);
+            e.Property(l => l.Valor).HasPrecision(12, 2);
+            e.HasIndex(l => new { l.TenantId, l.Data });
+            // Índice único: o mesmo atendimento não pode ser recebido duas vezes.
+            e.HasOne(l => l.Agendamento).WithOne(a => a.Recebimento)
+                .HasForeignKey<Lancamento>(l => l.AgendamentoId).OnDelete(DeleteBehavior.SetNull);
+        });
+
         // Isolamento multi-tenant: toda consulta só enxerga dados do tenant atual.
         modelBuilder.Entity<Profissional>().HasQueryFilter(x => x.TenantId == TenantAtual);
         modelBuilder.Entity<Servico>().HasQueryFilter(x => x.TenantId == TenantAtual);
@@ -108,5 +122,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext
         modelBuilder.Entity<Bloqueio>().HasQueryFilter(x => x.TenantId == TenantAtual);
         modelBuilder.Entity<Cliente>().HasQueryFilter(x => x.TenantId == TenantAtual);
         modelBuilder.Entity<Agendamento>().HasQueryFilter(x => x.TenantId == TenantAtual);
+        modelBuilder.Entity<Lancamento>().HasQueryFilter(x => x.TenantId == TenantAtual);
     }
 }

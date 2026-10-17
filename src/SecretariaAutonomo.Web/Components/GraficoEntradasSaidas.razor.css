@@ -1,0 +1,108 @@
+/* Textos e linhas usam as cores do tema do MudBlazor; só as barras têm cor própria. */
+
+.legenda {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.875rem;
+    color: var(--mud-palette-text-primary);
+}
+
+.amostra {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+/* No celular o gráfico rola na horizontal. O "rtl" faz a rolagem começar pelo fim,
+   mostrando os meses mais recentes; o conteúdo volta a "ltr" logo abaixo. */
+.rolagem {
+    overflow-x: auto;
+    direction: rtl;
+}
+
+.area {
+    position: relative;
+    direction: ltr;
+}
+
+svg {
+    display: block;
+}
+
+    svg text {
+        font-family: inherit;
+    }
+
+    svg rect[tabindex]:focus {
+        outline: none;
+    }
+
+.grade {
+    stroke: var(--mud-palette-lines-default);
+    stroke-width: 1;
+    opacity: 0.6;
+}
+
+.linha-base {
+    stroke: var(--mud-palette-text-secondary);
+    stroke-width: 1;
+}
+
+.eixo {
+    font-size: 11px;
+    fill: var(--mud-palette-text-secondary);
+}
+
+    .eixo.ano {
+        font-weight: 500;
+    }
+
+.destaque {
+    fill: var(--mud-palette-action-default-hover);
+}
+
+.dica {
+    position: absolute;
+    top: 8px;
+    min-width: 190px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: var(--mud-palette-surface);
+    color: var(--mud-palette-text-primary);
+    border: 1px solid var(--mud-palette-lines-default);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    font-size: 0.8125rem;
+    pointer-events: none;
+    z-index: 1;
+}
+
+    .dica .titulo {
+        font-weight: 600;
+        margin-bottom: 4px;
+    }
+
+    .dica .linha {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        line-height: 1.6;
+    }
+
+        .dica .linha b {
+            margin-left: auto;
+            padding-left: 12px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .dica .linha.saldo {
+            border-top: 1px solid var(--mud-palette-lines-default);
+            margin-top: 4px;
+            padding-top: 4px;
+        }
+
+    .dica .negativo {
+        color: var(--mud-palette-error);
+    }

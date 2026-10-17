@@ -24,7 +24,8 @@ public record AgendamentoDto(
     DateTimeOffset Fim,
     string Status,
     string Origem,
-    string? Observacao);
+    string? Observacao,
+    decimal? ValorRecebido = null);
 
 public record CriarAgendamentoRequest(
     Guid ProfissionalId,
@@ -95,3 +96,37 @@ public record EsqueciSenhaRequest(string Email);
 public record RedefinirSenhaRequest(string Email, string Codigo, string NovaSenha);
 
 public record MensagemDto(string Mensagem);
+
+// ----- Financeiro -----
+
+/// <summary>Tipo: "Entrada" ou "Saida". Forma de pagamento: Pix, Dinheiro, CartaoDebito, CartaoCredito, Transferencia ou Outro.</summary>
+public record LancamentoDto(
+    Guid Id,
+    string Tipo,
+    string Descricao,
+    decimal Valor,
+    DateOnly Data,
+    string Categoria,
+    string? FormaPagamento,
+    bool Pago,
+    Guid? AgendamentoId);
+
+public record SalvarLancamentoRequest(
+    string Tipo,
+    string Descricao,
+    decimal Valor,
+    DateOnly Data,
+    string Categoria,
+    string? FormaPagamento,
+    bool Pago);
+
+/// <summary>Entradas e saídas contam só o que já foi pago; o que está em aberto vai para "a receber" / "a pagar".</summary>
+public record ResumoFinanceiroDto(decimal Entradas, decimal Saidas, decimal Saldo, decimal AReceber, decimal APagar);
+
+public record ExtratoDto(IReadOnlyList<LancamentoDto> Lancamentos, ResumoFinanceiroDto Resumo);
+
+/// <summary>Totais já pagos de um mês. Meses sem movimento vêm zerados, para o gráfico não pular meses.</summary>
+public record EvolucaoMensalDto(int Ano, int Mes, decimal Entradas, decimal Saidas, decimal Saldo);
+
+/// <summary>"Recebi" na agenda: gera a entrada do atendimento e marca o agendamento como concluído.</summary>
+public record ReceberAgendamentoRequest(decimal Valor, string? FormaPagamento);

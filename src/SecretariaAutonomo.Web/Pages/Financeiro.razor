@@ -1,0 +1,270 @@
+@page "/financeiro"
+@attribute [Authorize]
+@inject ApiClient Api
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogos
+
+<PageTitle>Financeiro</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap" Class="mb-4">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+        <MudText Typo="Typo.h5" Class="mr-2">Financeiro</MudText>
+        <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" aria-label="Mês anterior" OnClick="@(() => IrParaMes(_mes.AddMonths(-1)))" />
+        <MudText Typo="Typo.subtitle1" Style="min-width: 140px; text-align: center">@NomeDoMes</MudText>
+        <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" aria-label="Próximo mês" OnClick="@(() => IrParaMes(_mes.AddMonths(1)))" />
+        @if (_mes != PrimeiroDia(DateTime.Today))
+        {
+            <MudButton Variant="Variant.Text" OnClick="@(() => IrParaMes(PrimeiroDia(DateTime.Today)))">Este mês</MudButton>
+        }
+    </MudStack>
+    <MudStack Row="true" Spacing="2">
+        <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => Abrir(null, "Entrada"))">
+            Entrada
+        </MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Error" StartIcon="@Icons.Material.Filled.Remove" OnClick="@(() => Abrir(null, "Saida"))">
+            Saída
+        </MudButton>
+    </MudStack>
+</MudStack>
+
+<MudGrid Spacing="3" Class="mb-1">
+    <MudItem xs="12" sm="4">
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.caption">Entradas</MudText>
+            <MudText Typo="Typo.h5" Color="Color.Success">@Resumo.Entradas.ToString("C")</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">A receber: @Resumo.AReceber.ToString("C")</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="4">
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.caption">Saídas</MudText>
+            <MudText Typo="Typo.h5" Color="Color.Error">@Resumo.Saidas.ToString("C")</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">A pagar: @Resumo.APagar.ToString("C")</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="4">
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.caption">Saldo do mês</MudText>
+            <MudText Typo="Typo.h5" Color="@(Resumo.Saldo < 0 ? Color.Error : Color.Primary)">@Resumo.Saldo.ToString("C")</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">Entradas menos saídas já pagas</MudText>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<MudGrid Spacing="3">
+    <MudItem xs="12" md="8">
+        <MudPaper Class="pa-4">
+            <MudChipSet T="string" @bind-SelectedValue="_filtro" SelectionMode="SelectionMode.SingleSelection" CheckMark="false" Class="mb-2">
+                <MudChip T="string" Value="@("Todos")" Default="true">Todos</MudChip>
+                <MudChip T="string" Value="@("Entrada")" Color="Color.Success">Entradas</MudChip>
+                <MudChip T="string" Value="@("Saida")" Color="Color.Error">Saídas</MudChip>
+                <MudChip T="string" Value="@("Aberto")" Color="Color.Warning">Em aberto</MudChip>
+            </MudChipSet>
+
+            <MudTable Items="Filtrados" Dense="true" Hover="true" Elevation="0" Breakpoint="Breakpoint.Sm" Loading="_carregando">
+                <HeaderContent>
+                    <MudTh>Data</MudTh>
+                    <MudTh>Descrição</MudTh>
+                    <MudTh Style="text-align: right">Valor</MudTh>
+                    <MudTh>Situação</MudTh>
+                    <MudTh></MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Data">@context.Data.ToString("dd/MM")</MudTd>
+                    <MudTd DataLabel="Descrição">
+                        @context.Descricao
+                        <MudText Typo="Typo.caption" Class="d-block" Color="Color.Secondary">
+                            @context.Categoria@(context.FormaPagamento is null ? "" : $" · {Formatacao.FormaPagamento(context.FormaPagamento)}")
+                        </MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Valor" Style="text-align: right; white-space: nowrap">
+                        @if (context.Tipo == "Entrada")
+                        {
+                            <MudText Color="Color.Success" Typo="Typo.body2"><b>+ @context.Valor.ToString("C")</b></MudText>
+                        }
+                        else
+                        {
+                            <MudText Color="Color.Error" Typo="Typo.body2"><b>− @context.Valor.ToString("C")</b></MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Situação">
+                        @if (context.Pago)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Default">@(context.Tipo == "Entrada" ? "Recebido" : "Pago")</MudChip>
+                        }
+                        else
+                        {
+                            <MudTooltip Text="@(context.Tipo == "Entrada" ? "Marcar como recebido" : "Marcar como pago")">
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" OnClick="@(() => MarcarPago(context))"
+                                         Icon="@Icons.Material.Filled.Check">
+                                    @(context.Tipo == "Entrada" ? "A receber" : "A pagar")
+                                </MudChip>
+                            </MudTooltip>
+                        }
+                    </MudTd>
+                    <MudTd Style="white-space: nowrap">
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" aria-label="Editar" OnClick="@(() => Abrir(context, context.Tipo))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" aria-label="Excluir" OnClick="@(() => Remover(context))" />
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText Color="Color.Secondary">Nenhum lançamento em @NomeDoMes.ToLower().</MudText>
+                </NoRecordsContent>
+            </MudTable>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="4">
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.h6" Class="mb-2">Por categoria</MudText>
+            @if (PorCategoria.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Os totais aparecem aqui conforme você lança.</MudText>
+            }
+            @foreach (var grupo in PorCategoria.GroupBy(c => c.Tipo))
+            {
+                var total = grupo.Sum(c => c.Total);
+                <MudText Typo="Typo.subtitle2" Class="mt-2" Color="@(grupo.Key == "Entrada" ? Color.Success : Color.Error)">
+                    @(grupo.Key == "Entrada" ? "Entradas" : "Saídas")
+                </MudText>
+                @foreach (var c in grupo)
+                {
+                    <div class="mt-1">
+                        <MudStack Row="true" Justify="Justify.SpaceBetween">
+                            <MudText Typo="Typo.body2">@c.Categoria</MudText>
+                            <MudText Typo="Typo.body2">@c.Total.ToString("C")</MudText>
+                        </MudStack>
+                        <MudProgressLinear Value="@(total == 0 ? 0 : (double)(c.Total / total * 100))" Size="Size.Small"
+                                           Color="@(grupo.Key == "Entrada" ? Color.Success : Color.Error)" Rounded="true" />
+                    </div>
+                }
+            }
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private DateTime _mes = PrimeiroDia(DateTime.Today);
+    private ExtratoDto? _extrato;
+    private List<string> _categorias = [];
+    private bool _carregando = true;
+    private string? _filtro = "Todos";
+
+    private ResumoFinanceiroDto Resumo => _extrato?.Resumo ?? new(0, 0, 0, 0, 0);
+
+    private string NomeDoMes
+    {
+        get
+        {
+            var nome = _mes.ToString("MMMM 'de' yyyy");
+            return char.ToUpper(nome[0]) + nome[1..];
+        }
+    }
+
+    private IEnumerable<LancamentoDto> Filtrados => (_extrato?.Lancamentos ?? []).Where(l => _filtro switch
+    {
+        "Entrada" or "Saida" => l.Tipo == _filtro,
+        "Aberto" => !l.Pago,
+        _ => true,
+    });
+
+    /// <summary>Só o que já foi pago, como nos totais do topo.</summary>
+    private List<(string Tipo, string Categoria, decimal Total)> PorCategoria =>
+        (_extrato?.Lancamentos ?? [])
+            .Where(l => l.Pago)
+            .GroupBy(l => (l.Tipo, l.Categoria))
+            .Select(g => (g.Key.Tipo, g.Key.Categoria, Total: g.Sum(l => l.Valor)))
+            .OrderBy(c => c.Tipo).ThenByDescending(c => c.Total)
+            .ToList();
+
+    private static DateTime PrimeiroDia(DateTime dia) => new(dia.Year, dia.Month, 1);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Carregar();
+        try
+        {
+            _categorias = await Api.ListarCategoriasAsync();
+        }
+        catch
+        {
+            // Sem as categorias usadas, o formulário ainda oferece as sugestões padrão.
+        }
+    }
+
+    private async Task IrParaMes(DateTime mes)
+    {
+        _mes = mes;
+        await Carregar();
+    }
+
+    private async Task Carregar()
+    {
+        _carregando = true;
+        try
+        {
+            var inicio = DateOnly.FromDateTime(_mes);
+            _extrato = await Api.ObterExtratoAsync(inicio, inicio.AddMonths(1).AddDays(-1));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _carregando = false;
+        }
+    }
+
+    private async Task Abrir(LancamentoDto? lancamento, string tipo)
+    {
+        var parametros = new DialogParameters<LancamentoDialog>
+        {
+            { x => x.Lancamento, lancamento },
+            { x => x.TipoInicial, tipo },
+            { x => x.Categorias, _categorias },
+        };
+        var dialogo = await Dialogos.ShowAsync<LancamentoDialog>(null, parametros,
+            new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true, CloseButton = true });
+
+        if (await dialogo.Result is { Canceled: false })
+        {
+            await Carregar();
+            _categorias = await Api.ListarCategoriasAsync();
+        }
+    }
+
+    private async Task MarcarPago(LancamentoDto lancamento)
+    {
+        try
+        {
+            await Api.MarcarLancamentoPagoAsync(lancamento.Id);
+            Snackbar.Add(lancamento.Tipo == "Entrada" ? "Marcado como recebido." : "Marcado como pago.", Severity.Success);
+            await Carregar();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task Remover(LancamentoDto lancamento)
+    {
+        var aviso = lancamento.AgendamentoId is null
+            ? $"Excluir \"{lancamento.Descricao}\" ({lancamento.Valor:C})?"
+            : $"Excluir \"{lancamento.Descricao}\" ({lancamento.Valor:C})? O atendimento volta a aparecer como não recebido na agenda.";
+        if (await Dialogos.ShowMessageBoxAsync("Excluir lançamento", aviso, yesText: "Excluir", cancelText: "Cancelar") != true)
+            return;
+
+        try
+        {
+            await Api.RemoverLancamentoAsync(lancamento.Id);
+            Snackbar.Add("Lançamento excluído.", Severity.Info);
+            await Carregar();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

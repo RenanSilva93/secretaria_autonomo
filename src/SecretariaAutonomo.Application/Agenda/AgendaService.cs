@@ -311,5 +311,6 @@ public class AgendaService(IAppDbContext db, ITenantContext tenant, TimeProvider
             a.Fim,
             a.Status.ToString(),
             a.Origem.ToString(),
-            a.Observacao);
+            a.Observacao,
+            a.Recebimento != null ? a.Recebimento.Valor : (decimal?)null);
 }

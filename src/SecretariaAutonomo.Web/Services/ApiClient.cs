@@ -31,6 +31,20 @@ public class ApiClient(HttpClient http)
     public Task<AgendamentoDto> RemarcarAgendamentoAsync(Guid id, RemarcarAgendamentoRequest req) =>
         PostAsync<AgendamentoDto>($"api/agendamentos/{id}/remarcar", req);
 
+    public Task<AgendamentoDto> ReceberAgendamentoAsync(Guid id, ReceberAgendamentoRequest req) =>
+        PostAsync<AgendamentoDto>($"api/agendamentos/{id}/receber", req);
+
+    public Task<ExtratoDto> ObterExtratoAsync(DateOnly de, DateOnly ate) =>
+        GetAsync<ExtratoDto>($"api/financeiro?de={de:yyyy-MM-dd}&ate={ate:yyyy-MM-dd}");
+    public Task<List<EvolucaoMensalDto>> ObterEvolucaoMensalAsync(DateOnly de, DateOnly ate) =>
+        GetAsync<List<EvolucaoMensalDto>>($"api/financeiro/evolucao?de={de:yyyy-MM-dd}&ate={ate:yyyy-MM-dd}");
+    public Task<List<string>> ListarCategoriasAsync() => GetAsync<List<string>>("api/financeiro/categorias");
+    public Task<LancamentoDto> CriarLancamentoAsync(SalvarLancamentoRequest req) => PostAsync<LancamentoDto>("api/financeiro/lancamentos", req);
+    public Task<LancamentoDto> AtualizarLancamentoAsync(Guid id, SalvarLancamentoRequest req) =>
+        PutAsync<LancamentoDto>($"api/financeiro/lancamentos/{id}", req);
+    public Task<LancamentoDto> MarcarLancamentoPagoAsync(Guid id) => PostAsync<LancamentoDto>($"api/financeiro/lancamentos/{id}/pagar", null);
+    public Task RemoverLancamentoAsync(Guid id) => DeleteAsync($"api/financeiro/lancamentos/{id}");
+
     public Task<List<HorarioDisponivelDto>> ListarDisponibilidadeAsync(Guid profissionalId, Guid servicoId, DateOnly data) =>
         GetAsync<List<HorarioDisponivelDto>>($"api/disponibilidade?profissionalId={profissionalId}&servicoId={servicoId}&data={data:yyyy-MM-dd}");
 

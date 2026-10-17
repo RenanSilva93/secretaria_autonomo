@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using SecretariaAutonomo.Application.Agenda;
+using SecretariaAutonomo.Application.Financeiro;
 using SecretariaAutonomo.Application.WhatsApp;
 
 namespace SecretariaAutonomo.Application;
@@ -10,6 +11,7 @@ public static class DependencyInjection
     {
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<AgendaService>();
+        services.AddScoped<FinanceiroService>();
         services.AddScoped<LembreteService>();
         services.AddScoped<ProcessadorMensagens>();
         services.AddScoped<NotificacoesService>();

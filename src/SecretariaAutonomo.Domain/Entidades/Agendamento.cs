@@ -25,6 +25,9 @@ public class Agendamento : EntidadeDoTenant
     public DateTimeOffset? ConfirmacaoEnviadaEm { get; set; }
     public DateTimeOffset CriadoEm { get; set; } = DateTimeOffset.UtcNow;
 
+    /// <summary>Entrada no financeiro gerada pelo "Recebi".</summary>
+    public Lancamento? Recebimento { get; set; }
+
     /// <summary>Agendamentos cancelados liberam o horário.</summary>
     public bool OcupaHorario => Status is not StatusAgendamento.Cancelado;
 }
