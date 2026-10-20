@@ -24,6 +24,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext
     public DbSet<MensagemWhatsApp> MensagensWhatsApp => Set<MensagemWhatsApp>();
     public DbSet<ConversaWhatsApp> ConversasWhatsApp => Set<ConversaWhatsApp>();
     public DbSet<Lancamento> Lancamentos => Set<Lancamento>();
+    public DbSet<InscricaoPush> InscricoesPush => Set<InscricaoPush>();
 
     // Lido a cada consulta: o EF avalia a propriedade do DbContext, não um valor fixo.
     private Guid TenantAtual => tenant.TenantId;
@@ -115,6 +116,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext
                 .HasForeignKey<Lancamento>(l => l.AgendamentoId).OnDelete(DeleteBehavior.SetNull);
         });
 
+        modelBuilder.Entity<InscricaoPush>(e =>
+        {
+            e.Property(i => i.Endpoint).HasMaxLength(2000);
+            e.Property(i => i.P256dh).HasMaxLength(200);
+            e.Property(i => i.Auth).HasMaxLength(100);
+            e.HasIndex(i => i.Endpoint).IsUnique();
+            e.HasIndex(i => i.TenantId);
+        });
+
         // Isolamento multi-tenant: toda consulta só enxerga dados do tenant atual.
         modelBuilder.Entity<Profissional>().HasQueryFilter(x => x.TenantId == TenantAtual);
         modelBuilder.Entity<Servico>().HasQueryFilter(x => x.TenantId == TenantAtual);
@@ -123,5 +133,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext
         modelBuilder.Entity<Cliente>().HasQueryFilter(x => x.TenantId == TenantAtual);
         modelBuilder.Entity<Agendamento>().HasQueryFilter(x => x.TenantId == TenantAtual);
         modelBuilder.Entity<Lancamento>().HasQueryFilter(x => x.TenantId == TenantAtual);
+        modelBuilder.Entity<InscricaoPush>().HasQueryFilter(x => x.TenantId == TenantAtual);
     }
 }

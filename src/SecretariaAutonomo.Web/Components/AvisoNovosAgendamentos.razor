@@ -1,0 +1,56 @@
+@implements IDisposable
+@inject MonitorAgendamentos Monitor
+@inject IDialogService Dialogos
+
+@* Fica no layout enquanto o profissional está logado e abre o pop-up a cada agendamento feito por cliente. *@
+
+@code {
+    private readonly List<AgendamentoDto> _pendentes = [];
+    private bool _mostrando;
+
+    protected override void OnInitialized()
+    {
+        Monitor.NovosAgendamentos += AoReceber;
+        Monitor.Iniciar();
+    }
+
+    private Task AoReceber(IReadOnlyList<AgendamentoDto> novos)
+    {
+        _pendentes.AddRange(novos);
+        // Não espera o pop-up fechar, senão o monitor pararia de consultar enquanto ele estiver aberto.
+        _ = InvokeAsync(MostrarPendentesAsync);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Se chegarem outros com o pop-up aberto, eles aparecem num novo pop-up assim que este fechar.</summary>
+    private async Task MostrarPendentesAsync()
+    {
+        if (_mostrando)
+            return;
+
+        _mostrando = true;
+        try
+        {
+            while (_pendentes.Count > 0)
+            {
+                var lote = _pendentes.ToList();
+                _pendentes.Clear();
+
+                var parametros = new DialogParameters<NovosAgendamentosDialog> { { x => x.Agendamentos, lote } };
+                var dialogo = await Dialogos.ShowAsync<NovosAgendamentosDialog>(null, parametros,
+                    new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true });
+                await dialogo.Result;
+            }
+        }
+        finally
+        {
+            _mostrando = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        Monitor.NovosAgendamentos -= AoReceber;
+        Monitor.Parar();
+    }
+}

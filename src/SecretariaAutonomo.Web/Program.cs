@@ -21,6 +21,8 @@ builder.Services.AddSingleton(sp => new HttpClient(new AutenticacaoHandler(sp.Ge
     BaseAddress = apiBaseUrl,
 });
 builder.Services.AddSingleton<ApiClient>();
+builder.Services.AddSingleton<MonitorAgendamentos>();
+builder.Services.AddSingleton<NotificacoesPush>();
 
 builder.Services.AddAuthorizationCore();
 builder.Services.AddCascadingAuthenticationState();

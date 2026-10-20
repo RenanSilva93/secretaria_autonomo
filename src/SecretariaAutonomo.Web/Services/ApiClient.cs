@@ -25,6 +25,8 @@ public class ApiClient(HttpClient http)
 
     public Task<List<AgendamentoDto>> ListarAgendamentosAsync(DateTimeOffset de, DateTimeOffset ate) =>
         GetAsync<List<AgendamentoDto>>($"api/agendamentos?de={Iso(de)}&ate={Iso(ate)}");
+    public Task<NovosAgendamentosDto> ListarNovosAgendamentosAsync(DateTimeOffset? desde) =>
+        GetAsync<NovosAgendamentosDto>("api/agendamentos/novos" + (desde is null ? "" : $"?desde={Iso(desde.Value)}"));
     public Task<AgendamentoDto> CriarAgendamentoAsync(CriarAgendamentoRequest req) => PostAsync<AgendamentoDto>("api/agendamentos", req);
     public Task<AgendamentoDto> ConfirmarAgendamentoAsync(Guid id) => PostAsync<AgendamentoDto>($"api/agendamentos/{id}/confirmar", null);
     public Task<AgendamentoDto> CancelarAgendamentoAsync(Guid id) => PostAsync<AgendamentoDto>($"api/agendamentos/{id}/cancelar", null);
@@ -49,6 +51,12 @@ public class ApiClient(HttpClient http)
         GetAsync<List<HorarioDisponivelDto>>($"api/disponibilidade?profissionalId={profissionalId}&servicoId={servicoId}&data={data:yyyy-MM-dd}");
 
     public Task<ContaDto> ObterContaAsync() => GetAsync<ContaDto>("api/conta");
+
+    public Task<ChavePushDto> ObterChavePushAsync() => GetAsync<ChavePushDto>("api/push/chave");
+    public async Task SalvarInscricaoPushAsync(SalvarInscricaoPushRequest req) =>
+        await GarantirSucessoAsync(await http.PostAsJsonAsync("api/push/inscricoes", req));
+    public async Task RemoverInscricaoPushAsync(RemoverInscricaoPushRequest req) =>
+        await GarantirSucessoAsync(await http.PostAsJsonAsync("api/push/inscricoes/remover", req));
 
     public Task<List<HorarioTrabalhoDto>> ListarHorariosAsync(Guid profissionalId) =>
         GetAsync<List<HorarioTrabalhoDto>>($"api/profissionais/{profissionalId}/horarios");

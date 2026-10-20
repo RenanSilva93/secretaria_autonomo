@@ -3,6 +3,8 @@
 @inject ApiClient Api
 @inject ISnackbar Snackbar
 @inject IDialogService Dialogos
+@inject MonitorAgendamentos Monitor
+@implements IDisposable
 
 <PageTitle>Agenda</PageTitle>
 
@@ -183,8 +185,9 @@
 
     protected override async Task OnInitializedAsync()
     {
-        if (DateTime.TryParseExact(DiaInicial, "yyyy-MM-dd", null, System.Globalization.DateTimeStyles.None, out var dia))
+        if (LerDiaInicial() is { } dia)
             _dia = dia;
+        Monitor.NovosAgendamentos += AoChegarAgendamentos;
 
         try
         {
@@ -199,6 +202,45 @@
 
         await CarregarDia();
     }
+
+    /// <summary>Navegar para "/?dia=..." já estando na agenda (ex.: pelo aviso de novo agendamento) só troca o parâmetro.</summary>
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_iniciado && LerDiaInicial() is { } dia && dia != _dia)
+            await IrParaDia(dia);
+        _iniciado = true;
+    }
+
+    private bool _iniciado;
+
+    private DateTime? LerDiaInicial() =>
+        DateTime.TryParseExact(DiaInicial, "yyyy-MM-dd", null, System.Globalization.DateTimeStyles.None, out var dia) ? dia : null;
+
+    /// <summary>Atualiza a lista quando um cliente agenda, sem mexer no que o profissional está preenchendo.</summary>
+    private async Task AoChegarAgendamentos(IReadOnlyList<AgendamentoDto> novos)
+    {
+        var inicio = Formatacao.InicioDoDiaLocal(_dia);
+        var fim = Formatacao.InicioDoDiaLocal(_dia.AddDays(1));
+        if (_carregando || !novos.Any(a => a.Inicio < fim && a.Fim > inicio))
+            return;
+
+        await InvokeAsync(async () =>
+        {
+            try
+            {
+                _agendamentos = await Api.ListarAgendamentosAsync(inicio, fim);
+                if (_horarioEscolhido is null)
+                    await CarregarHorarios();
+                StateHasChanged();
+            }
+            catch (Exception)
+            {
+                // A tela fica com a lista anterior; o pop-up já avisou do agendamento.
+            }
+        });
+    }
+
+    public void Dispose() => Monitor.NovosAgendamentos -= AoChegarAgendamentos;
 
     private async Task IrParaDia(DateTime dia)
     {

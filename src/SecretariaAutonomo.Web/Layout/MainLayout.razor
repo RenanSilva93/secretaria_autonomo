@@ -2,11 +2,18 @@
 @inject ProvedorAutenticacao Autenticacao
 @inject Sessao Sessao
 @inject NavigationManager Navigation
+@inject NotificacoesPush Push
 
 <MudThemeProvider Theme="@Tema.Padrao" @bind-IsDarkMode="_modoEscuro" ObserveSystemDarkModeChange="true" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
+
+<AuthorizeView>
+    <Authorized>
+        <AvisoNovosAgendamentos />
+    </Authorized>
+</AuthorizeView>
 
 <MudLayout>
     <MudAppBar Elevation="1">
@@ -16,6 +23,7 @@
         <MudIconButton Icon="@(_modoEscuro ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
                        Color="Color.Inherit" OnClick="@(() => _modoEscuro = !_modoEscuro)" />
         <AuthorizeView>
+            <BotaoNotificacoes />
             <MudMenu Icon="@Icons.Material.Filled.AccountCircle" Color="Color.Inherit" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
                 <MudMenuItem Disabled="true">@context.User.Identity?.Name</MudMenuItem>
                 <MudMenuItem Icon="@Icons.Material.Filled.Logout" OnClick="Sair">Sair</MudMenuItem>
@@ -43,6 +51,16 @@
 
     private async Task Sair()
     {
+        // Antes de apagar o token: quem saiu deste aparelho não deve continuar recebendo avisos.
+        try
+        {
+            await Push.DesativarAsync();
+        }
+        catch (Exception)
+        {
+            // Não impede a saída.
+        }
+
         await Sessao.SairAsync();
         Navigation.NavigateTo("entrar");
     }

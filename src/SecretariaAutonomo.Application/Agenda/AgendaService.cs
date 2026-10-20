@@ -10,7 +10,8 @@ namespace SecretariaAutonomo.Application.Agenda;
 /// <summary>
 /// Regras da agenda. Painel, página pública e WhatsApp/chatbot devem passar sempre por aqui.
 /// </summary>
-public class AgendaService(IAppDbContext db, ITenantContext tenant, TimeProvider relogio, IFilaConfirmacoes filaConfirmacoes)
+public class AgendaService(
+    IAppDbContext db, ITenantContext tenant, TimeProvider relogio, IFilaConfirmacoes filaConfirmacoes, IFilaAvisosPush filaAvisosPush)
 {
     /// <summary>Clientes não podem marcar em cima da hora pela página pública ou pelo WhatsApp.</summary>
     public static readonly TimeSpan AntecedenciaMinimaCliente = TimeSpan.FromHours(1);
@@ -85,6 +86,10 @@ public class AgendaService(IAppDbContext db, ITenantContext tenant, TimeProvider
         if (origem == OrigemAgendamento.PaginaPublica)
             filaConfirmacoes.Enfileirar(agendamento.Id);
 
+        // Quem agendou foi o cliente (página ou WhatsApp): avisa o profissional no celular.
+        if (origem != OrigemAgendamento.Painel)
+            filaAvisosPush.Enfileirar(agendamento.Id);
+
         return await ObterAsync(agendamento.Id, ct);
     }
 
@@ -96,6 +101,27 @@ public class AgendaService(IAppDbContext db, ITenantContext tenant, TimeProvider
             query = query.Where(a => a.ProfissionalId == profissionalId);
 
         return await query.OrderBy(a => a.Inicio).Select(ParaDto).ToListAsync(ct);
+    }
+
+    /// <summary>
+    /// Agendamentos que os clientes fizeram sozinhos (página pública ou WhatsApp) depois de <paramref name="desde"/>,
+    /// para o painel avisar o profissional. Sem <paramref name="desde"/>, só devolve o relógio para começar a contar dali.
+    /// </summary>
+    public async Task<NovosAgendamentosDto> ListarNovosDeClientesAsync(DateTimeOffset? desde, CancellationToken ct = default)
+    {
+        var agora = relogio.GetUtcNow();
+        if (desde is null)
+            return new NovosAgendamentosDto(agora, []);
+
+        var inicio = desde.Value.ToUniversalTime();
+        var novos = await db.Agendamentos
+            .Where(a => a.Origem != OrigemAgendamento.Painel && a.CriadoEm > inicio && a.CriadoEm <= agora)
+            .OrderBy(a => a.CriadoEm)
+            .Take(20)
+            .Select(ParaDto)
+            .ToListAsync(ct);
+
+        return new NovosAgendamentosDto(agora, novos);
     }
 
     /// <summary>Próximos horários ativos (pendentes ou confirmados) de um cliente.</summary>

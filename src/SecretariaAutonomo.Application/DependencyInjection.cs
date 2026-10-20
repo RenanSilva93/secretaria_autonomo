@@ -15,6 +15,7 @@ public static class DependencyInjection
         services.AddScoped<LembreteService>();
         services.AddScoped<ProcessadorMensagens>();
         services.AddScoped<NotificacoesService>();
+        services.AddScoped<Push.AvisosPushService>();
         services.AddScoped<Chatbot.ChatbotService>();
         return services;
     }

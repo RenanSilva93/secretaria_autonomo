@@ -5,6 +5,8 @@
 @inject IDialogService Dialogos
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
+@inject MonitorAgendamentos Monitor
+@implements IDisposable
 
 <PageTitle>Agenda da semana</PageTitle>
 
@@ -117,6 +119,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        Monitor.NovosAgendamentos += AoChegarAgendamentos;
         try
         {
             if (Autenticacao.Conta?.ProfissionalId is { } profissionalId)
@@ -129,6 +132,23 @@
 
         await Carregar();
     }
+
+    /// <summary>Recarrega a semana quando um cliente agenda nela.</summary>
+    private async Task AoChegarAgendamentos(IReadOnlyList<AgendamentoDto> novos)
+    {
+        var inicio = Formatacao.InicioDoDiaLocal(_segunda);
+        var fim = Formatacao.InicioDoDiaLocal(_segunda.AddDays(7));
+        if (_carregando || _arrastando is not null || !novos.Any(a => a.Inicio < fim && a.Fim > inicio))
+            return;
+
+        await InvokeAsync(async () =>
+        {
+            await Carregar();
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose() => Monitor.NovosAgendamentos -= AoChegarAgendamentos;
 
     private async Task IrPara(DateTime dia)
     {

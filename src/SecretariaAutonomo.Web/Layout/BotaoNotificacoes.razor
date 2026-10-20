@@ -1,0 +1,111 @@
+@inject NotificacoesPush Push
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+
+@* Sino da barra do topo: liga/desliga os avisos de novos agendamentos neste aparelho, mesmo com o painel fechado. *@
+@if (_estado is not EstadoPush.Indisponivel)
+{
+    <MudTooltip Text="@Dica">
+        <MudIconButton Icon="@Icone" Color="Color.Inherit" Disabled="_ocupado" OnClick="Alternar" aria-label="@Dica" />
+    </MudTooltip>
+}
+
+@code {
+    private const string ChaveSugestao = "secretaria.sugestaoNotificacoes";
+
+    private EstadoPush _estado = EstadoPush.Indisponivel;
+    private bool _ocupado;
+    private Snackbar? _sugestao;
+
+    private string Icone => _estado switch
+    {
+        EstadoPush.Ativado => Icons.Material.Filled.NotificationsActive,
+        EstadoPush.Bloqueado => Icons.Material.Filled.NotificationsOff,
+        _ => Icons.Material.Outlined.NotificationsNone,
+    };
+
+    private string Dica => _estado switch
+    {
+        EstadoPush.Ativado => "Avisos de novos agendamentos ligados neste aparelho",
+        EstadoPush.Bloqueado => "Notificações bloqueadas no navegador",
+        _ => "Receber aviso de novos agendamentos neste aparelho",
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _estado = await Push.ObterEstadoAsync();
+        }
+        catch (Exception)
+        {
+            _estado = EstadoPush.Indisponivel;
+        }
+
+        if (_estado is EstadoPush.Desativado)
+            await SugerirUmaVezAsync();
+    }
+
+    /// <summary>Na primeira vez neste aparelho, oferece ligar os avisos. O navegador só pede permissão a partir de um clique.</summary>
+    private async Task SugerirUmaVezAsync()
+    {
+        if (await JS.InvokeAsync<bool?>("secretaria.lerJson", ChaveSugestao) is true)
+            return;
+
+        await JS.InvokeVoidAsync("secretaria.salvarJson", ChaveSugestao, true);
+        _sugestao = Snackbar.Add("Quer ser avisado no celular quando um cliente agendar?", Severity.Info, o =>
+        {
+            o.VisibleStateDuration = 15000;
+            o.Action = "Ativar";
+            o.ActionColor = Color.Primary;
+            o.OnClick = _ => Alternar();
+        });
+    }
+
+    private async Task Alternar()
+    {
+        if (_sugestao is not null)
+        {
+            Snackbar.Remove(_sugestao);
+            _sugestao = null;
+        }
+
+        if (_estado is EstadoPush.Bloqueado)
+        {
+            Snackbar.Add("As notificações estão bloqueadas. Libere nas configurações do site, no navegador, e recarregue a página.", Severity.Warning);
+            return;
+        }
+
+        _ocupado = true;
+        try
+        {
+            if (_estado is EstadoPush.Ativado)
+            {
+                await Push.DesativarAsync();
+                _estado = EstadoPush.Desativado;
+                Snackbar.Add("Avisos desligados neste aparelho.", Severity.Normal);
+                return;
+            }
+
+            _estado = await Push.AtivarAsync();
+            switch (_estado)
+            {
+                case EstadoPush.Ativado:
+                    Snackbar.Add("Pronto! Você vai receber um aviso a cada agendamento feito por cliente.", Severity.Success);
+                    break;
+                case EstadoPush.Bloqueado:
+                    Snackbar.Add("Você bloqueou as notificações. Dá para liberar nas configurações do site, no navegador.", Severity.Warning);
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Não foi possível ligar os avisos: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _ocupado = false;
+            StateHasChanged();
+        }
+    }
+}

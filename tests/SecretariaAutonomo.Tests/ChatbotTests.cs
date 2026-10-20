@@ -250,7 +250,7 @@ public class ChatbotTests
     private async Task<IReadOnlyList<RespostaBot>> Enviar(string telefone, string texto, string? payload = null, string? perfil = "Joana Silva")
     {
         using var db = NovoDb(out var tenant);
-        var agenda = new AgendaService(db, tenant, _relogio, new FilaFalsa());
+        var agenda = new AgendaService(db, tenant, _relogio, new FilaFalsa(), new FilaFalsa());
         var chatbot = new ChatbotService(db, tenant, agenda, _relogio);
         var mensagem = new MensagemRecebida($"wamid.{++_mensagens}", telefone, perfil, payload is null ? "text" : "interactive", texto, payload);
         return await chatbot.ResponderAsync(mensagem);
@@ -278,7 +278,7 @@ public class ChatbotTests
         return cliente;
     }
 
-    private class FilaFalsa : IFilaConfirmacoes
+    private class FilaFalsa : IFilaConfirmacoes, IFilaAvisosPush
     {
         public void Enfileirar(Guid agendamentoId) { }
     }

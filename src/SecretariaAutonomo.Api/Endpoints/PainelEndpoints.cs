@@ -28,6 +28,7 @@ public static class PainelEndpoints
         MapHorarios(api.MapGroup("/profissionais/{profissionalId:guid}/horarios"));
         MapBloqueios(api.MapGroup("/profissionais/{profissionalId:guid}/bloqueios"));
         MapFinanceiro(api.MapGroup("/financeiro"));
+        MapPush(api.MapGroup("/push"));
 
         api.MapGet("/disponibilidade", (Guid profissionalId, Guid servicoId, DateOnly data, AgendaService agenda, CancellationToken ct) =>
             agenda.ObterHorariosDisponiveisAsync(profissionalId, servicoId, data, ct));
@@ -140,6 +141,10 @@ public static class PainelEndpoints
         grupo.MapGet("/", (DateTimeOffset de, DateTimeOffset ate, Guid? profissionalId, AgendaService agenda, CancellationToken ct) =>
             agenda.ListarAsync(de, ate, profissionalId, ct));
 
+        // Consultado periodicamente pelo painel para mostrar o aviso de "novo agendamento".
+        grupo.MapGet("/novos", (DateTimeOffset? desde, AgendaService agenda, CancellationToken ct) =>
+            agenda.ListarNovosDeClientesAsync(desde, ct));
+
         grupo.MapPost("/", async (CriarAgendamentoRequest req, AgendaService agenda, CancellationToken ct) =>
         {
             var criado = await agenda.CriarAgendamentoAsync(req, OrigemAgendamento.Painel, ct);
@@ -237,6 +242,58 @@ public static class PainelEndpoints
         grupo.MapDelete("/{bloqueioId:guid}", async (Guid profissionalId, Guid bloqueioId, AgendaService agenda, CancellationToken ct) =>
         {
             await agenda.RemoverBloqueioAsync(profissionalId, bloqueioId, ct);
+            return Results.NoContent();
+        });
+    }
+
+    /// <summary>
+    /// Serviços de push dos navegadores. A API faz POST no endpoint informado pelo navegador, então só aceita
+    /// esses domínios: assim ninguém usa o cadastro para fazer o servidor chamar endereços internos.
+    /// </summary>
+    private static readonly string[] ServicosDePush =
+        ["fcm.googleapis.com", "push.services.mozilla.com", "notify.windows.com", "push.apple.com"];
+
+    private static void MapPush(RouteGroupBuilder grupo)
+    {
+        grupo.MapGet("/chave", (IEnviadorPush enviador) => new ChavePushDto(enviador.ChavePublica));
+
+        // O mesmo navegador pode se inscrever de novo (ex.: outra pessoa entrou nele): a inscrição passa para o usuário atual.
+        grupo.MapPost("/inscricoes", async (
+            SalvarInscricaoPushRequest req, ClaimsPrincipal usuario, IAppDbContext db, ITenantContext tenant, CancellationToken ct) =>
+        {
+            if (!Uri.TryCreate(req.Endpoint, UriKind.Absolute, out var endereco)
+                || endereco.Scheme != Uri.UriSchemeHttps
+                || !ServicosDePush.Any(s => endereco.Host == s || endereco.Host.EndsWith("." + s))
+                || req.Endpoint.Length > 2000
+                || string.IsNullOrWhiteSpace(req.P256dh) || req.P256dh.Length > 200
+                || string.IsNullOrWhiteSpace(req.Auth) || req.Auth.Length > 100)
+                throw new RegraDeNegocioException("Este navegador não é compatível com as notificações.");
+
+            var usuarioId = Guid.Parse(usuario.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var inscricao = await db.InscricoesPush.IgnoreQueryFilters().FirstOrDefaultAsync(i => i.Endpoint == req.Endpoint, ct);
+            if (inscricao is null)
+            {
+                inscricao = new InscricaoPush { Endpoint = req.Endpoint, P256dh = req.P256dh, Auth = req.Auth };
+                db.InscricoesPush.Add(inscricao);
+            }
+
+            inscricao.TenantId = tenant.TenantId;
+            inscricao.UsuarioId = usuarioId;
+            inscricao.P256dh = req.P256dh;
+            inscricao.Auth = req.Auth;
+            await db.SaveChangesAsync(ct);
+            return Results.NoContent();
+        });
+
+        grupo.MapPost("/inscricoes/remover", async (RemoverInscricaoPushRequest req, IAppDbContext db, CancellationToken ct) =>
+        {
+            var inscricao = await db.InscricoesPush.FirstOrDefaultAsync(i => i.Endpoint == req.Endpoint, ct);
+            if (inscricao is not null)
+            {
+                db.InscricoesPush.Remove(inscricao);
+                await db.SaveChangesAsync(ct);
+            }
+
             return Results.NoContent();
         });
     }

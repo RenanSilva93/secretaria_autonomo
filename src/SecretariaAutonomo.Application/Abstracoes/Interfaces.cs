@@ -15,6 +15,7 @@ public interface IAppDbContext
     DbSet<MensagemWhatsApp> MensagensWhatsApp { get; }
     DbSet<ConversaWhatsApp> ConversasWhatsApp { get; }
     DbSet<Lancamento> Lancamentos { get; }
+    DbSet<InscricaoPush> InscricoesPush { get; }
 
     Task<int> SaveChangesAsync(CancellationToken ct = default);
 }
@@ -45,6 +46,32 @@ public record OpcaoMenu(string Id, string Titulo, string? Descricao = null);
 public interface IFilaConfirmacoes
 {
     void Enfileirar(Guid agendamentoId);
+}
+
+/// <summary>Agendamentos feitos por clientes que precisam virar notificação no celular do profissional (Web Push).</summary>
+public interface IFilaAvisosPush
+{
+    void Enfileirar(Guid agendamentoId);
+}
+
+public enum ResultadoPush
+{
+    Enviado,
+
+    /// <summary>O navegador cancelou a inscrição (ex.: o usuário bloqueou as notificações). Pode ser apagada.</summary>
+    InscricaoExpirada,
+    Falha,
+}
+
+/// <summary>Envia uma mensagem Web Push (VAPID) para um navegador inscrito.</summary>
+public interface IEnviadorPush
+{
+    bool Configurado { get; }
+
+    /// <summary>Chave pública VAPID que o navegador usa para se inscrever.</summary>
+    string? ChavePublica { get; }
+
+    Task<ResultadoPush> EnviarAsync(InscricaoPush inscricao, string conteudoJson, CancellationToken ct = default);
 }
 
 public interface IWhatsAppClient

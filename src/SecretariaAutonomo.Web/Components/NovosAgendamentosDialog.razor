@@ -1,0 +1,64 @@
+@inject ProvedorAutenticacao Autenticacao
+@inject NavigationManager Navigation
+
+@* Pop-up que avisa o profissional quando um cliente agenda sozinho pela página pública ou pelo WhatsApp. *@
+<MudDialog>
+    <TitleContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.NotificationsActive" Color="Color.Primary" />
+            <MudText Typo="Typo.h6">
+                @(Agendamentos.Count == 1 ? "Novo agendamento!" : $"{Agendamentos.Count} novos agendamentos!")
+            </MudText>
+        </MudStack>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            @foreach (var a in Agendamentos)
+            {
+                var (texto, cor) = Formatacao.Status(a.Status);
+                <MudPaper Outlined="true" Class="pa-3">
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
+                        <div>
+                            <MudText><b>@a.Cliente</b> · @a.Servico</MudText>
+                            <MudText Typo="Typo.body2">@Formatacao.Periodo(a.Inicio, a.Fim, _fuso)</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                @Formatacao.Telefone(a.TelefoneCliente) · com @a.Profissional
+                            </MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@Origem(a.Origem)</MudText>
+                        </div>
+                        <MudChip T="string" Size="Size.Small" Color="cor">@texto</MudChip>
+                    </MudStack>
+                </MudPaper>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Close())">Fechar</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CalendarMonth" OnClick="VerNaAgenda">
+            Ver na agenda
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] public required IMudDialogInstance MudDialog { get; set; }
+    [Parameter] public required IReadOnlyList<AgendamentoDto> Agendamentos { get; set; }
+
+    private TimeZoneInfo _fuso = TimeZoneInfo.Local;
+
+    protected override void OnInitialized() => _fuso = Formatacao.Fuso(Autenticacao.Conta);
+
+    private static string Origem(string origem) => origem switch
+    {
+        "PaginaPublica" => "Pela página de agendamento",
+        "WhatsApp" => "Pelo WhatsApp",
+        _ => origem,
+    };
+
+    private void VerNaAgenda()
+    {
+        var dia = TimeZoneInfo.ConvertTime(Agendamentos[0].Inicio, _fuso);
+        MudDialog.Close();
+        Navigation.NavigateTo($"?dia={dia:yyyy-MM-dd}");
+    }
+}

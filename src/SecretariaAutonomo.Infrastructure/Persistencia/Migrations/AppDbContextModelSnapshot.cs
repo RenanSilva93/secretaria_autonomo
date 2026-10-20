@@ -353,6 +353,46 @@ namespace SecretariaAutonomo.Infrastructure.Persistencia.Migrations
                     b.ToTable("HorariosTrabalho");
                 });
 
+            modelBuilder.Entity("SecretariaAutonomo.Domain.Entidades.InscricaoPush", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Auth")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTimeOffset>("CriadaEm")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Endpoint")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("P256dh")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UsuarioId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Endpoint")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId");
+
+                    b.ToTable("InscricoesPush");
+                });
+
             modelBuilder.Entity("SecretariaAutonomo.Domain.Entidades.Lancamento", b =>
                 {
                     b.Property<Guid>("Id")

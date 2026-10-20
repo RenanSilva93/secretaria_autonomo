@@ -126,10 +126,37 @@ As chaves que assinam os tokens (ASP.NET Data Protection) ficam na tabela `DataP
 
 **E-mail em produção:** configure `Email:SmtpHost`, `SmtpPorta`, `SmtpUsuario`, `SmtpSenha` e `Remetente` com os dados do seu provedor (Brevo, Amazon SES etc.). Use user-secrets ou variáveis de ambiente, nunca o appsettings. Sem `SmtpHost`, os e-mails são descartados e um aviso vai para o log.
 
+## Avisos de novos agendamentos
+
+Quando um cliente agenda pela página pública ou pelo WhatsApp, o profissional é avisado de duas formas:
+
+- **Pop-up no painel:** com o painel aberto, ele consulta `GET /api/agendamentos/novos` a cada 30 s e mostra o pop-up. A Agenda do dia e a Semana se atualizam sozinhas.
+- **Notificação no aparelho (Web Push):** chega mesmo com o painel fechado. Cada aparelho liga os avisos pelo sino da barra do topo. No primeiro acesso, o painel também oferece ligar. Tocar na notificação abre a agenda no dia do horário.
+
+Como funciona: o `AgendaService` põe o agendamento na fila, o `PushWorker` envia em segundo plano (o cliente não espera) e as inscrições que o navegador cancelou são apagadas sozinhas. Ao sair do painel, o aparelho deixa de receber avisos.
+
+**Chaves VAPID.** Sem elas, o sino não aparece e nada é enviado. Gere um par uma vez e guarde em user-secrets (produção: variáveis de ambiente):
+
+```bash
+npx web-push generate-vapid-keys
+cd src/SecretariaAutonomo.Api
+dotnet user-secrets set "WebPush:ChavePublica" "<Public Key>"
+dotnet user-secrets set "WebPush:ChavePrivada" "<Private Key>"
+dotnet user-secrets set "WebPush:Assunto"      "mailto:voce@seudominio.com.br"
+```
+
+Não troque as chaves depois de publicar: as inscrições existentes deixam de funcionar e cada aparelho precisa ligar o sino de novo.
+
+Limitações:
+- **iPhone/iPad:** só funciona com o painel instalado na tela de início (Compartilhar → Adicionar à Tela de Início), iOS 16.4 ou mais novo. No Safari comum, o sino não aparece.
+- Exige HTTPS (em `localhost` funciona sem).
+- Por segurança, a API só aceita inscrições dos serviços de push conhecidos (Google, Mozilla, Microsoft e Apple). Veja `ServicosDePush` em `PainelEndpoints`.
+
 ## Antes de ir para produção
 
 - ~~Recuperação de senha~~ ✅. Falta configurar o SMTP de produção e `App:UrlFrontend`.
 - Configurar `Cors:Origens` e a connection string de produção.
+- Gerar as chaves VAPID de produção (`WebPush:ChavePublica`, `WebPush:ChavePrivada` e `WebPush:Assunto`).
 - Servir API e front em HTTPS.
 - Mensagens de template são cobradas pela Meta; inclua isso no preço dos planos.
 

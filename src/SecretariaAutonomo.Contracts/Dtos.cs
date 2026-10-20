@@ -27,6 +27,20 @@ public record AgendamentoDto(
     string? Observacao,
     decimal? ValorRecebido = null);
 
+/// <summary>
+/// Agendamentos feitos por clientes (página pública ou WhatsApp) desde a última consulta.
+/// <paramref name="Ate"/> é o relógio do servidor: o painel manda de volta como "desde" na próxima consulta.
+/// </summary>
+public record NovosAgendamentosDto(DateTimeOffset Ate, IReadOnlyList<AgendamentoDto> Agendamentos);
+
+/// <summary>Chave pública VAPID para o navegador se inscrever. Nula quando o servidor não tem Web Push configurado.</summary>
+public record ChavePushDto(string? ChavePublica);
+
+/// <summary>Dados da inscrição devolvidos pelo PushManager do navegador.</summary>
+public record SalvarInscricaoPushRequest(string Endpoint, string P256dh, string Auth);
+
+public record RemoverInscricaoPushRequest(string Endpoint);
+
 public record CriarAgendamentoRequest(
     Guid ProfissionalId,
     Guid ServicoId,

@@ -7,6 +7,8 @@ using SecretariaAutonomo.Application.Abstracoes;
 using SecretariaAutonomo.Infrastructure.Email;
 using SecretariaAutonomo.Infrastructure.Identidade;
 using SecretariaAutonomo.Infrastructure.Persistencia;
+using SecretariaAutonomo.Infrastructure.Push;
+using Lib.Net.Http.WebPush;
 using SecretariaAutonomo.Infrastructure.WhatsApp;
 
 namespace SecretariaAutonomo.Infrastructure;
@@ -60,6 +62,13 @@ public static class DependencyInjection
         services.AddSingleton<FilaConfirmacoes>();
         services.AddSingleton<IFilaConfirmacoes>(sp => sp.GetRequiredService<FilaConfirmacoes>());
         services.AddHostedService<ConfirmacaoWorker>();
+
+        services.Configure<PushOptions>(configuration.GetSection(PushOptions.Secao));
+        services.AddHttpClient<PushServiceClient>();
+        services.AddScoped<IEnviadorPush, EnviadorWebPush>();
+        services.AddSingleton<FilaAvisosPush>();
+        services.AddSingleton<IFilaAvisosPush>(sp => sp.GetRequiredService<FilaAvisosPush>());
+        services.AddHostedService<PushWorker>();
 
         return services;
     }

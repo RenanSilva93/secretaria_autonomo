@@ -73,6 +73,15 @@ public class Sessao(IJSRuntime js, HttpClient httpSemAutenticacao)
 
     public async Task SairAsync()
     {
+        // Cobre também a sessão recusada pela API: o aparelho para de receber avisos de novos agendamentos.
+        try
+        {
+            await js.InvokeAsync<string?>("secretariaPush.cancelar");
+        }
+        catch (JSException)
+        {
+        }
+
         await LimparAsync();
         Mudou?.Invoke();
     }

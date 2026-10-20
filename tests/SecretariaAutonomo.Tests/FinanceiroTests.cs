@@ -161,7 +161,7 @@ public class FinanceiroTests
 
         using var db = NovoDb(out var tenant);
         tenant.Definir(Guid.NewGuid());
-        var financeiro = new FinanceiroService(db, tenant, new AgendaService(db, tenant, new FakeTimeProvider(), new FilaFalsa()));
+        var financeiro = new FinanceiroService(db, tenant, new AgendaService(db, tenant, new FakeTimeProvider(), new FilaFalsa(), new FilaFalsa()));
 
         var extrato = await financeiro.ObterExtratoAsync(Outubro, Outubro.AddMonths(1));
         Assert.Empty(extrato.Lancamentos);
@@ -175,7 +175,7 @@ public class FinanceiroTests
     {
         using var db = NovoDb(out var tenant);
         tenant.Definir(_negocio.Id);
-        var agenda = new AgendaService(db, tenant, new FakeTimeProvider(), new FilaFalsa());
+        var agenda = new AgendaService(db, tenant, new FakeTimeProvider(), new FilaFalsa(), new FilaFalsa());
         return await acao(new FinanceiroService(db, tenant, agenda));
     }
 
@@ -185,7 +185,7 @@ public class FinanceiroTests
         return new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase(_banco).Options, tenant);
     }
 
-    private class FilaFalsa : IFilaConfirmacoes
+    private class FilaFalsa : IFilaConfirmacoes, IFilaAvisosPush
     {
         public void Enfileirar(Guid agendamentoId) { }
     }
